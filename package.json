@@ -1,0 +1,8 @@
+{
+	"dependencies": {
+		"framer-motion": "^12.34.0",
+		"lucide-react": "^0.564.0",
+		"clsx": "^2.1.1",
+		"tailwind-merge": "^3.4.1"
+	}
+}

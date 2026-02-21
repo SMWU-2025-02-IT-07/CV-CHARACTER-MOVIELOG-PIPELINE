@@ -27,6 +27,17 @@ def _scenario_path(scenario_id: str) -> Path:
     d = _ensure_dir()
     return d / f"{scenario_id}.json"
 
+
+def _normalize_scene_duration(scene: dict) -> dict:
+    # Backward compatibility for already-stored payloads using duration_sec.
+    if "duration" in scene:
+        return scene
+    if "duration_sec" in scene:
+        normalized = dict(scene)
+        normalized["duration"] = normalized.pop("duration_sec")
+        return normalized
+    return scene
+
 def _build_create_prompt(req: CreateScenarioRequest) -> str:
     sc = req.options.scene_count
     lang = req.options.lang
@@ -39,7 +50,7 @@ You create simple, realistic storyboard scenes for a short video.
 Language: {lang}
 
 OUTPUT MUST BE VALID JSON ONLY with this schema:
-{{"scenes":[{{"id":1,"title":"...","description":"...","duration_sec":4}}, ...]}}
+{{"scenes":[{{"id":1,"title":"...","description":"...","duration":4}}, ...]}}
 
 Hard constraints (MUST follow):
 - Scene count must be exactly {sc}.
@@ -50,7 +61,7 @@ Hard constraints (MUST follow):
 - No story, no mystery, no narration, no metaphors, no dramatic tone.
 - Each description must be ONE short sentence (<= 40 Korean characters if ko, otherwise <= 120 chars).
 - Each description must describe only what is visible on screen (camera view + action + key objects).
-- duration_sec should be a small integer 3~6.
+- duration should be a small integer 3~6.
 
 Styling guide:
 - Think of 3 cuts: (1) establishing shot, (2) action/detail shot, (3) closing shot.
@@ -79,7 +90,7 @@ You create simple, realistic storyboard scenes for a short video.
 Language: {lang}
 
 OUTPUT MUST BE VALID JSON ONLY with this schema:
-{{"scenes":[{{"id":1,"title":"...","description":"...","duration_sec":4}}, ...]}}
+{{"scenes":[{{"id":1,"title":"...","description":"...","duration":4}}, ...]}}
 
 Hard constraints (MUST follow):
 - Scene count must be exactly {sc}.
@@ -89,7 +100,7 @@ Hard constraints (MUST follow):
 - No story, no mystery, no narration, no metaphors, no dramatic tone.
 - Each description must be ONE short sentence (<= 25 Korean characters if ko, otherwise <= 120 chars).
 - Each description must describe only what is visible on screen (camera view + action + key objects).
-- duration_sec should be a small integer 3~6.
+- duration should be a small integer 3~6.
 - You MUST apply the user edits below:
   If an edit references scene_id=k, the output scene with id=k must reflect that edit closely.
 
@@ -114,7 +125,7 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
             id=s["id"],
             title=s["title"],
             description=s["description"],
-            duration_sec=s["duration_sec"],
+            duration=s["duration"],
             image_url=None,
         )
         for s in data["scenes"]
@@ -145,8 +156,9 @@ def get_scenario(scenario_id: str) -> CreateScenarioResponse:
 
     try:
         payload = json.loads(p.read_text(encoding="utf-8"))
+        scenes = [_normalize_scene_duration(s) for s in payload["scenes"]]
         return CreateScenarioResponse.model_validate(
-            {"scenario_id": payload["scenario_id"], "scenes": payload["scenes"]}
+            {"scenario_id": payload["scenario_id"], "scenes": scenes}
         )
     except AppError:
         raise
@@ -163,9 +175,10 @@ def list_scenarios(limit: int = 20, offset: int = 0) -> list[CreateScenarioRespo
     for f in sliced:
         try:
             payload = json.loads(f.read_text(encoding="utf-8"))
+            scenes = [_normalize_scene_duration(s) for s in payload["scenes"]]
             items.append(
                 CreateScenarioResponse.model_validate(
-                    {"scenario_id": payload["scenario_id"], "scenes": payload["scenes"]}
+                    {"scenario_id": payload["scenario_id"], "scenes": scenes}
                 )
             )
         except Exception:
@@ -174,7 +187,7 @@ def list_scenarios(limit: int = 20, offset: int = 0) -> list[CreateScenarioRespo
     return items
 
 
-def regenerate_scenario(req: RegenerateScenarioRequest) -> RegenerateScenarioResponse:
+def regenerate_scenario(scenario_id: str, req: RegenerateScenarioRequest) -> RegenerateScenarioResponse:
     prompt = _build_regen_prompt(req)
     data = generate_scenes_json(prompt)
 
@@ -183,13 +196,11 @@ def regenerate_scenario(req: RegenerateScenarioRequest) -> RegenerateScenarioRes
             id=s["id"],
             title=s["title"],
             description=s["description"],
-            duration_sec=s["duration_sec"],
+            duration=s["duration"],
             image_url=None,
         )
         for s in data["scenes"]
     ]
-
-    scenario_id = str(uuid4())
     payload = {
         "scenario_id": scenario_id,
         "request": req.model_dump(mode="json"),

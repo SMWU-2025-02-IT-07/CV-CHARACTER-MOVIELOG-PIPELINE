@@ -8,7 +8,7 @@ client = OpenAI(api_key=settings.openai_api_key)
 
 def generate_scenes_json(prompt: str, model: str | None = None) -> dict:
     """
-    Returns dict like: {"scenes":[{"id":1,"title":"...","description":"...","duration_sec":4}, ...]}
+    Returns dict like: {"scenes":[{"id":1,"title":"...","description":"...","duration":4}, ...]}
     """
     try:
         res = client.responses.create(

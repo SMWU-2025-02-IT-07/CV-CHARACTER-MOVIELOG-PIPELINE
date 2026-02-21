@@ -1,9 +1,9 @@
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 
 class CharacterIn(BaseModel):
     name: str = Field(..., min_length=1)
-    image_url: HttpUrl
+    image_url: str = Field(..., min_length=1)
 
 class BriefIn(BaseModel):
     who: str = Field(..., min_length=1)
@@ -25,8 +25,8 @@ class SceneOut(BaseModel):
     id: int
     title: str
     description: str
-    duration_sec: int
-    image_url: Optional[HttpUrl] = None
+    duration: int
+    image_url: Optional[str] = None
 
 class CreateScenarioResponse(BaseModel):
     scenario_id: str
@@ -38,7 +38,7 @@ class SceneEditIn(BaseModel):
 
 class RegenerateScenarioRequest(BaseModel):
     scenes: List[SceneEditIn]
-    character_image_url: HttpUrl
+    character_image_url: str = Field(..., min_length=1)
     options: ScenarioOptions = ScenarioOptions()
 
 class RegenerateScenarioResponse(BaseModel):
@@ -50,7 +50,7 @@ class SceneLLM(BaseModel):
     id: int
     title: str
     description: str
-    duration_sec: int
+    duration: int
 
 class ScenesLLM(BaseModel):
     model_config = ConfigDict(extra="forbid")

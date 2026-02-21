@@ -1,4 +1,4 @@
-// src/app/components/Screen2.tsx
+﻿// src/app/components/Screen2.tsx
 
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
@@ -13,7 +13,7 @@ interface Screen2Props {
 }
 
 export function Screen2({ onEdit, onNext }: Screen2Props) {
-  const { scenes, setScenes, characterData } = useAppContext();
+  const { scenes, setScenes, characterData, scenarioId, setScenarioId } = useAppContext();
   const [editingSceneId, setEditingSceneId] = useState<number | null>(null);
   const [editedDescription, setEditedDescription] = useState("");
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -40,11 +40,13 @@ export function Screen2({ onEdit, onNext }: Screen2Props) {
   const handleRegenerateAll = async () => {
     setIsRegenerating(true);
     try {
-      const updatedScenes = await AIService.regenerateScenario(
+      const result = await AIService.regenerateScenario(
+        scenarioId,
         scenes.map(s => ({ id: s.id, description: s.description })),
         characterData.imageUrl
       );
-      setScenes(updatedScenes);
+      setScenarioId(result.scenarioId);
+      setScenes(result.scenes);
     } catch (error) {
       console.error('Regeneration error:', error);
     } finally {
@@ -103,7 +105,7 @@ export function Screen2({ onEdit, onNext }: Screen2Props) {
                 <span className="scene-badge">{scene.title || `SCENE ${scene.id}`}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                   <Clock size={11} />
-                  {scene.duration || '4초'}
+                  {scene.duration + '초'}
                 </span>
               </div>
               {editingSceneId !== scene.id && (
@@ -216,7 +218,7 @@ export function Screen2({ onEdit, onNext }: Screen2Props) {
                       </p>
                     </div>
                     <div style={{ marginTop: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                      SCENE {scene.id} · {scene.duration || '4초'}
+                      SCENE {scene.id} · {scene.duration + '초'}
                     </div>
                   </div>
                 )}
@@ -238,7 +240,7 @@ export function Screen2({ onEdit, onNext }: Screen2Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           {[
             { label: 'SCENES', value: `${scenes.length}` },
-            { label: 'EST. LENGTH', value: '12s' },
+            { label: 'EST. LENGTH', value: scenes.reduce((sum, scene) => sum + scene.duration, 0) + 's' },
             { label: 'RESOLUTION', value: '1080p' },
           ].map((item) => (
             <div key={item.label} style={{ textAlign: 'center' }}>

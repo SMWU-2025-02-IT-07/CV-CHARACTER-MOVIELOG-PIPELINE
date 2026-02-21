@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, RefObject } from "react";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');`;
 
@@ -166,10 +166,10 @@ function useScrollY() {
   return y;
 }
 
-function useInView(ref, threshold = 0.15) {
+function useInView(ref: RefObject<Element | null>, threshold = 0.15): boolean {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    if (!ref.current) return;
+    if (!ref || !ref.current) return;
     const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold });
     obs.observe(ref.current);
     return () => obs.disconnect();
@@ -179,7 +179,7 @@ function useInView(ref, threshold = 0.15) {
 
 /* ─── SUB-COMPONENTS ─────────────────────────────── */
 
-function HeroSection({ onStart }) {
+function HeroSection({ onStart }: { onStart: () => void }) {
   const scrollY = useScrollY();
   const heroOpacity = Math.max(0, 1 - scrollY / 400);
   const heroY = scrollY * 0.35;
@@ -339,7 +339,7 @@ function SpecTable() {
   );
 }
 
-function CTASection({ onStart }) {
+function CTASection({ onStart }: { onStart: () => void }) {
   const ref = useRef(null);
   const visible = useInView(ref);
 
@@ -401,7 +401,7 @@ function CTASection({ onStart }) {
 }
 
 function FAQSection() {
-  const [open, setOpen] = useState(null);
+  const [open, setOpen] = useState<number | null>(null);
   const ref = useRef(null);
   const visible = useInView(ref);
 
@@ -435,7 +435,7 @@ function FAQSection() {
   );
 }
 
-function Footer({ onStart }) {
+function Footer({ onStart }: { onStart: () => void }) {
   return (
     <footer style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "3rem 2rem" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1.5rem" }}>
@@ -446,8 +446,8 @@ function Footer({ onStart }) {
         <div style={{ display: "flex", gap: "1.5rem" }}>
           {["서비스 소개", "문의하기", "개인정보처리방침"].map(link => (
             <span key={link} style={{ fontSize: "0.78rem", color: "#44445a", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "color 0.2s" }}
-              onMouseEnter={e => e.target.style.color = "#c4b5fd"}
-              onMouseLeave={e => e.target.style.color = "#44445a"}
+              onMouseEnter={e => (e.target as HTMLElement).style.color = "#c4b5fd"}
+              onMouseLeave={e => (e.target as HTMLElement).style.color = "#44445a"}
             >{link}</span>
           ))}
         </div>
@@ -465,7 +465,7 @@ function Footer({ onStart }) {
 }
 
 /* ─── MAIN EXPORT ────────────────────────────────── */
-export default function Screen0({ onStart }) {
+export default function Screen0({ onStart }: { onStart: () => void }) {
   return (
     <>
       <style>{GLOBAL_CSS}</style>

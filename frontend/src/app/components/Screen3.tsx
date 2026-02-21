@@ -1,4 +1,4 @@
-// src/app/components/Screen3.tsx
+﻿// src/app/components/Screen3.tsx
 
 import { Loader2, Sparkles, Film, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -11,7 +11,7 @@ interface Screen3Props {
 }
 
 export function Screen3({ onComplete }: Screen3Props) {
-  const { scenes, characterData, setScenes, setFinalVideoUrl } = useAppContext();
+  const { scenes, characterData, scenarioId, setScenes, setFinalVideoUrl } = useAppContext();
   const [sceneStatuses, setSceneStatuses] = useState<{
     [key: number]: 'pending' | 'generating' | 'completed' | 'error'
   }>({});
@@ -31,7 +31,7 @@ export function Screen3({ onComplete }: Screen3Props) {
       const scene = scenes[i];
       setSceneStatuses(prev => ({ ...prev, [scene.id]: 'generating' }));
       try {
-        const videoUrl = await AIService.generateSceneVideo(scene.id, scene.description, characterData.imageUrl);
+        const videoUrl = await AIService.generateSceneVideo(scene.id, scene.description, characterData.imageUrl, scenarioId);
         updatedScenes[i] = { ...updatedScenes[i], videoUrl };
         setScenes(updatedScenes);
         setSceneStatuses(prev => ({ ...prev, [scene.id]: 'completed' }));
@@ -48,7 +48,7 @@ export function Screen3({ onComplete }: Screen3Props) {
     const sceneIndex = scenes.findIndex(s => s.id === sceneId);
     if (sceneIndex === -1) return;
     try {
-      const videoUrl = await AIService.generateSceneVideo(sceneId, scenes[sceneIndex].description, characterData.imageUrl);
+      const videoUrl = await AIService.generateSceneVideo(sceneId, scenes[sceneIndex].description, characterData.imageUrl, scenarioId);
       const updatedScenes = [...scenes];
       updatedScenes[sceneIndex] = { ...updatedScenes[sceneIndex], videoUrl };
       setScenes(updatedScenes);
@@ -63,12 +63,12 @@ export function Screen3({ onComplete }: Screen3Props) {
   const handleMergeAndComplete = async () => {
     try {
       const videoUrls = scenes.map(scene => scene.videoUrl).filter((url): url is string => !!url);
-      if (videoUrls.length === 0) { alert('생성된 영상이 없습니다.'); return; }
+      if (videoUrls.length === 0) { alert('?앹꽦???곸긽???놁뒿?덈떎.'); return; }
       const finalUrl = await AIService.mergeVideos(videoUrls);
       setFinalVideoUrl(finalUrl);
       onComplete();
     } catch (error) {
-      alert('영상 병합에 실패했습니다.');
+      alert('?곸긽 蹂묓빀???ㅽ뙣?덉뒿?덈떎.');
     }
   };
 
@@ -92,10 +92,9 @@ export function Screen3({ onComplete }: Screen3Props) {
       <div className="fade-up fade-up-1" style={{ marginBottom: '1.75rem' }}>
         <div className="eyebrow" style={{ marginBottom: '0.75rem' }}>Scene Rendering</div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>
-          장면별 <span className="gradient-brand-text">영상 생성</span> 중
-        </h1>
+          ?λ㈃蹂?<span className="gradient-brand-text">?곸긽 ?앹꽦</span> 以?        </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-          각 장면의 영상을 확인하고 마음에 들지 않으면 재생성할 수 있습니다
+          媛??λ㈃???곸긽???뺤씤?섍퀬 留덉쓬???ㅼ? ?딆쑝硫??ъ깮?깊븷 ???덉뒿?덈떎
         </p>
       </div>
 
@@ -237,7 +236,7 @@ export function Screen3({ onComplete }: Screen3Props) {
                   </p>
                   <div style={{ marginTop: '12px', display: 'flex', gap: '12px' }}>
                     {[
-                      { label: 'DURATION', value: scene.duration || '4s' },
+                      { label: 'DURATION', value: scene.duration + '초' },
                       { label: 'SCENE', value: `#${scene.id}` },
                     ].map(item => (
                       <div key={item.label}>
@@ -268,7 +267,7 @@ export function Screen3({ onComplete }: Screen3Props) {
             }}
           >
             <Sparkles size={18} />
-            영상 병합 및 완료
+            ?곸긽 蹂묓빀 諛??꾨즺
           </button>
         </div>
       ) : (
@@ -284,7 +283,7 @@ export function Screen3({ onComplete }: Screen3Props) {
           }} />
           <div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              영상을 생성하고 있습니다. 잠시만 기다려주세요...
+              ?곸긽???앹꽦?섍퀬 ?덉뒿?덈떎. ?좎떆留?湲곕떎?ㅼ＜?몄슂...
             </p>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
               {completedCount}/{totalCount} SCENES COMPLETE
@@ -299,3 +298,5 @@ export function Screen3({ onComplete }: Screen3Props) {
     </div>
   );
 }
+
+

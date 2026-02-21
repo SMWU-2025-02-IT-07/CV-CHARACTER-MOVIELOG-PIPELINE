@@ -18,7 +18,7 @@ interface Scene {
   videoUrl?: string;
   imageUrl?: string;
   title?: string;
-  duration_sec: number;
+  duration: number;
 }
 
 interface AppContextType {

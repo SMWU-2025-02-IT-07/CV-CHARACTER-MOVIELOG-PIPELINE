@@ -14,7 +14,7 @@ interface Screen1Props {
 }
 
 export function Screen1({ onNext }: Screen1Props) {
-  const { characterData, setCharacterData, setScenes } = useAppContext();
+  const { characterData, setCharacterData, setScenes, setScenarioId } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -58,11 +58,12 @@ export function Screen1({ onNext }: Screen1Props) {
     if (!validateForm()) return;
     setIsLoading(true);
     try {
-      const generatedScenes = await AIService.generateScenario(
+      const result = await AIService.generateScenario(
         characterData.name, characterData.who, characterData.where,
         characterData.what, characterData.how, characterData.imageUrl
       );
-      setScenes(generatedScenes);
+      setScenarioId(result.scenarioId);
+      setScenes(result.scenes);
       onNext();
     } catch (error) {
       setErrors({ ...errors, general: '시나리오 생성에 실패했습니다.' });

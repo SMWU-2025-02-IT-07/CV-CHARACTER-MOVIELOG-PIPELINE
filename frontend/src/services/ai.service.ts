@@ -9,7 +9,7 @@ export interface SceneOutput {
   imageUrl?: string;
   videoUrl?: string;
   title?: string;
-  duration_sec: number;
+  duration: number;
 }
 
 export interface ScenarioResult {
@@ -33,24 +33,24 @@ export const AIService = {
       scenes: [
         {
           id: 1,
-          description: `${who} ${where}¿¡ °©´Ï´Ù`,
+          description: `${who} ${where}ï¿½ï¿½ ï¿½ï¿½ï¿½Ï´ï¿½`,
           imageUrl: '/demo/images/scene-1.png',
           title: 'Scene 1',
-          duration_sec: 4,
+          duration: 4,
         },
         {
           id: 2,
           description: `${who} ${what}`,
           imageUrl: '/demo/images/scene-2.png',
           title: 'Scene 2',
-          duration_sec: 4,
+          duration: 4,
         },
         {
           id: 3,
           description: `${who} ${how}`,
           imageUrl: '/demo/images/scene-3.png',
           title: 'Scene 3',
-          duration_sec: 4,
+          duration: 4,
         },
       ],
     };
@@ -69,7 +69,7 @@ export const AIService = {
         ...scene,
         imageUrl: `/demo/images/scene-${scene.id}.png`,
         title: `Scene ${scene.id}`,
-        duration_sec: 4,
+        duration: 4,
       })),
     };
   },
@@ -89,3 +89,4 @@ export const AIService = {
     return videoUrls[0] || '/demo/videos/scene-1.mp4';
   },
 };
+

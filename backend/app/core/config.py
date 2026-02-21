@@ -1,9 +1,11 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     openai_api_key: str
     openai_model: str = "gpt-5"
     cors_origins: str = "http://localhost:3000"
+    scenarios_dir: str = str((Path(__file__).resolve().parents[2] / "data" / "scenarios"))
 
     @property
     def cors_origins_list(self) -> list[str]:

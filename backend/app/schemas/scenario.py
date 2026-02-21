@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 from typing import Optional, List
 
 class CharacterIn(BaseModel):
@@ -21,6 +21,7 @@ class CreateScenarioRequest(BaseModel):
     options: ScenarioOptions = ScenarioOptions()
 
 class SceneOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     id: int
     title: str
     description: str
@@ -43,3 +44,14 @@ class RegenerateScenarioRequest(BaseModel):
 class RegenerateScenarioResponse(BaseModel):
     scenario_id: str
     scenes: List[SceneOut]
+
+class SceneLLM(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: int
+    title: str
+    description: str
+    duration_sec: int
+
+class ScenesLLM(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scenes: list[SceneLLM]

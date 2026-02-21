@@ -1,75 +1,207 @@
+from __future__ import annotations
+
+import json
+from uuid import uuid4
+from pathlib import Path
+from typing import Optional, List
+
+from app.core.config import settings
 from app.core.errors import AppError
-from app.schemas.scenario import SceneOut, BriefIn
+from app.schemas.scenario import (
+    CreateScenarioRequest,
+    CreateScenarioResponse,
+    RegenerateScenarioRequest,
+    RegenerateScenarioResponse,
+    SceneOut,
+)
+from app.services.llm_openai import generate_scenes_json
 
-def build_prompt_for_create(name: str, image_url: str, brief: BriefIn, scene_count: int, lang: str) -> str:
+
+def _ensure_dir() -> Path:
+    d = Path(settings.scenarios_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _scenario_path(scenario_id: str) -> Path:
+    d = _ensure_dir()
+    return d / f"{scenario_id}.json"
+
+def _build_create_prompt(req: CreateScenarioRequest) -> str:
+    sc = req.options.scene_count
+    lang = req.options.lang
+
+    # brief를 한 문장으로 고정 (행동 범위 고정용)
+    anchor = f"{req.character.name}가 {req.brief.where} {req.brief.what} {req.brief.how}"
+
     return f"""
-You are an assistant that writes short 3-scene storyboards for a character video.
-Return ONLY valid JSON matching this schema exactly:
-{{
-  "scenes": [
-    {{"id":1,"title":"Scene 1","description":"...","duration_sec":4}},
-    {{"id":2,"title":"Scene 2","description":"...","duration_sec":4}},
-    {{"id":3,"title":"Scene 3","description":"...","duration_sec":4}}
-  ]
-}}
+You create simple, realistic storyboard scenes for a short video.
+Language: {lang}
 
-Rules:
-- scenes length MUST be {scene_count}
-- ids MUST be 1..{scene_count}
-- language: {lang} (Korean if 'ko')
-- description should be 1 sentence, clear action and place
-- Keep each scene coherent with brief
-- Do not mention JSON rules in output
+OUTPUT MUST BE VALID JSON ONLY with this schema:
+{{"scenes":[{{"id":1,"title":"...","description":"...","duration_sec":4}}, ...]}}
+
+Hard constraints (MUST follow):
+- Scene count must be exactly {sc}.
+- Main character MUST be "{req.character.name}" in every scene.
+- Do NOT introduce any new named characters (no barista, friend, etc.).
+- Setting MUST stay "{req.brief.where}" only (no alley, street, other places).
+- Actions MUST match this core action: "{anchor}".
+- No story, no mystery, no narration, no metaphors, no dramatic tone.
+- Each description must be ONE short sentence (<= 40 Korean characters if ko, otherwise <= 120 chars).
+- Each description must describe only what is visible on screen (camera view + action + key objects).
+- duration_sec should be a small integer 3~6.
+
+Styling guide:
+- Think of 3 cuts: (1) establishing shot, (2) action/detail shot, (3) closing shot.
+- Titles must be plain and functional (e.g., "카페 전경", "노트북 작업", "커피 한 모금").
 
 Character:
-- name: {name}
-- reference image url: {image_url}
+- name: {req.character.name}
+- image_url: {req.character.image_url}
 
 Brief:
-- who: {brief.who}
-- where: {brief.where}
-- what: {brief.what}
-- how: {brief.how}
+- who: {req.brief.who}
+- where: {req.brief.where}
+- what: {req.brief.what}
+- how: {req.brief.how}
 """.strip()
 
-def validate_and_normalize_scenes(payload: dict, scene_count: int) -> list[SceneOut]:
-    if "scenes" not in payload or not isinstance(payload["scenes"], list):
-        raise AppError("UPSTREAM_ERROR", "LLM returned invalid JSON: missing scenes", status_code=502)
+def _build_regen_prompt(req: RegenerateScenarioRequest) -> str:
+    sc = req.options.scene_count
+    lang = req.options.lang
 
-    scenes = payload["scenes"]
-    if len(scenes) != scene_count:
-        raise AppError("UPSTREAM_ERROR", f"LLM returned {len(scenes)} scenes, expected {scene_count}", status_code=502)
+    # 사용자가 준 수정사항을 강제 반영
+    edits = "\n".join([f"- scene_id={s.id}: {s.description}" for s in req.scenes])
 
-    out: list[SceneOut] = []
-    for i, s in enumerate(scenes, start=1):
-        if not isinstance(s, dict):
-            raise AppError("UPSTREAM_ERROR", "LLM returned invalid scene type", status_code=502)
-        if s.get("id") != i:
-            raise AppError("UPSTREAM_ERROR", "LLM returned invalid scene id sequence", status_code=502)
-        title = s.get("title") or f"Scene {i}"
-        desc = s.get("description")
-        dur = s.get("duration_sec")
-        if not isinstance(desc, str) or not desc.strip():
-            raise AppError("UPSTREAM_ERROR", "LLM returned empty description", status_code=502)
-        if not isinstance(dur, int) or dur <= 0:
-            raise AppError("UPSTREAM_ERROR", "LLM returned invalid duration_sec", status_code=502)
-
-        out.append(SceneOut(id=i, title=title, description=desc.strip(), duration_sec=dur, image_url=None))
-
-    return out
-
-def build_prompt_for_regenerate(scenes: list[dict], character_image_url: str, lang: str) -> str:
     return f"""
-Return ONLY valid JSON:
-{{"scenes":[{{"id":1,"title":"Scene 1","description":"...","duration_sec":4}}, ...]}}
+You create simple, realistic storyboard scenes for a short video.
+Language: {lang}
 
-Rules:
-- Keep same number of scenes and same ids
-- language: {lang}
-- Keep character consistent with reference image url: {character_image_url}
-- Improve clarity and cinematic flow, but do not add new characters
-- Output must be JSON only
+OUTPUT MUST BE VALID JSON ONLY with this schema:
+{{"scenes":[{{"id":1,"title":"...","description":"...","duration_sec":4}}, ...]}}
 
-Current scenes (user-edited):
-{scenes}
+Hard constraints (MUST follow):
+- Scene count must be exactly {sc}.
+- Do NOT introduce any new named characters.
+- Use the same main character implied by the edits and reference image.
+- Setting stays consistent (do not add new places unless explicitly in edits).
+- No story, no mystery, no narration, no metaphors, no dramatic tone.
+- Each description must be ONE short sentence (<= 25 Korean characters if ko, otherwise <= 120 chars).
+- Each description must describe only what is visible on screen (camera view + action + key objects).
+- duration_sec should be a small integer 3~6.
+- You MUST apply the user edits below:
+  If an edit references scene_id=k, the output scene with id=k must reflect that edit closely.
+
+Reference image (character):
+- {req.character_image_url}
+
+User edits:
+{edits}
+
+Styling guide:
+- 3 cuts: (1) establishing, (2) action/detail, (3) closing.
+- Titles must be plain and functional.
 """.strip()
+
+def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
+    prompt = _build_create_prompt(req)
+    data = generate_scenes_json(prompt)
+
+    # data: {"scenes":[...]} 구조는 generate_scenes_json에서 이미 검증됨(ScenesLLM)
+    scenes_out: list[SceneOut] = [
+        SceneOut(
+            id=s["id"],
+            title=s["title"],
+            description=s["description"],
+            duration_sec=s["duration_sec"],
+            image_url=None,
+        )
+        for s in data["scenes"]
+    ]
+
+    scenario_id = str(uuid4())
+    payload = {
+        "scenario_id": scenario_id,
+        "request": req.model_dump(mode="json"),
+        "scenes": [s.model_dump(mode="json") for s in scenes_out],
+    }
+
+    try:
+        _scenario_path(scenario_id).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        raise AppError("STORAGE_ERROR", f"Failed to save scenario: {str(e)}", status_code=500)
+
+    return CreateScenarioResponse(scenario_id=scenario_id, scenes=scenes_out)
+
+
+def get_scenario(scenario_id: str) -> CreateScenarioResponse:
+    p = _scenario_path(scenario_id)
+    if not p.exists():
+        raise AppError("NOT_FOUND", f"Scenario not found: {scenario_id}", status_code=404)
+
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+        return CreateScenarioResponse.model_validate(
+            {"scenario_id": payload["scenario_id"], "scenes": payload["scenes"]}
+        )
+    except AppError:
+        raise
+    except Exception as e:
+        raise AppError("STORAGE_ERROR", f"Failed to load scenario: {str(e)}", status_code=500)
+
+
+def list_scenarios(limit: int = 20, offset: int = 0) -> list[CreateScenarioResponse]:
+    d = _ensure_dir()
+    files = sorted(d.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+
+    sliced = files[offset : offset + limit]
+    items: List[CreateScenarioResponse] = []
+    for f in sliced:
+        try:
+            payload = json.loads(f.read_text(encoding="utf-8"))
+            items.append(
+                CreateScenarioResponse.model_validate(
+                    {"scenario_id": payload["scenario_id"], "scenes": payload["scenes"]}
+                )
+            )
+        except Exception:
+            # 파일 하나 깨져도 리스트 전체는 유지
+            continue
+    return items
+
+
+def regenerate_scenario(req: RegenerateScenarioRequest) -> RegenerateScenarioResponse:
+    prompt = _build_regen_prompt(req)
+    data = generate_scenes_json(prompt)
+
+    scenes_out: list[SceneOut] = [
+        SceneOut(
+            id=s["id"],
+            title=s["title"],
+            description=s["description"],
+            duration_sec=s["duration_sec"],
+            image_url=None,
+        )
+        for s in data["scenes"]
+    ]
+
+    scenario_id = str(uuid4())
+    payload = {
+        "scenario_id": scenario_id,
+        "request": req.model_dump(mode="json"),
+        "scenes": [s.model_dump(mode="json") for s in scenes_out],
+    }
+
+    try:
+        _scenario_path(scenario_id).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        raise AppError("STORAGE_ERROR", f"Failed to save scenario: {str(e)}", status_code=500)
+
+    return RegenerateScenarioResponse(scenario_id=scenario_id, scenes=scenes_out)

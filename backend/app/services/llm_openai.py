@@ -1,6 +1,8 @@
+import json
 from openai import OpenAI
 from app.core.config import settings
 from app.core.errors import AppError
+from app.schemas.scenario import ScenesLLM
 
 client = OpenAI(api_key=settings.openai_api_key)
 
@@ -11,13 +13,25 @@ def generate_scenes_json(prompt: str, model: str | None = None) -> dict:
     try:
         res = client.responses.create(
             model=model or settings.openai_model,
-            instructions="You generate structured JSON only. Do not include any extra text.",
             input=prompt,
+            # Structured Outputs: schema 강제 (text.format)
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "scenario_scenes",
+                    "schema": ScenesLLM.model_json_schema(),
+                    "strict": True,
+                }
+            },
         )
-        # res.output_text is documented convenience accessor for text output. :contentReference[oaicite:3]{index=3}
-        text = res.output_text
-        import json
-        return json.loads(text)
+
+        raw = res.output_text  # SDK convenience accessor
+        parsed = json.loads(raw)
+
+        # 서버에서 한 번 더 Pydantic 검증 (필드 누락/타입 오류 방지)
+        ScenesLLM.model_validate(parsed)
+
+        return parsed
+
     except Exception as e:
-        # 모델이 JSON이 아닌 걸 뱉거나 API 실패하는 케이스 모두 upstream으로 처리
         raise AppError("UPSTREAM_ERROR", f"LLM call failed: {str(e)}", status_code=502)

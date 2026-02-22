@@ -1,0 +1,26 @@
+🎞️ SCENE 1: 발견과 외침 (The Call)
+고양이가 무언가를 발견하고 야옹거리는 클로즈업 샷입니다. (업로드하신 원본 이미지의 느낌을 살린 시작점)
+
+Prompt (English):
+
+A cinematic close-up of a fluffy silver tabby cat with bright green eyes, mouth open as if meowing or yawning. The cat is sitting in a sun-dappled forest. Background is a soft bokeh of green trees. The camera slowly pushes in towards the cat's face, capturing the detailed texture of its fur and the sunlight reflecting in its eyes. High quality, 8k resolution.
+
+설명: 숲속에 앉아 입을 벌리고 있는 고양이의 클로즈업. 배경은 흐릿한 숲(보케). 카메라가 천천히 고양이 얼굴로 줌인(Push-in)하며 털의 질감과 눈빛을 강조.
+
+🎞️ SCENE 2: 추격 (The Chase)
+고양이가 숲속을 가로질러 달려가는 역동적인 샷입니다.
+
+Prompt (English):
+
+Low-angle tracking shot of the silver tabby cat running enthusiastically through tall green grass in a forest. The cat is chasing a small glowing blue butterfly. Dynamic motion, fur blowing in the wind, paws kicking up small dust particles. Sunlight streams through the trees, creating a dramatic atmosphere. Fast-paced camera movement following the cat from the side.
+
+설명: 숲속의 긴 풀숲을 헤치며 달리는 고양이를 낮은 앵글(Low-angle)에서 옆으로 따라가며 찍는 샷. 빛나는 파란 나비를 쫓고 있음. 역동적인 움직임과 바람에 날리는 털, 드라마틱한 빛 연출.
+
+🎞️ SCENE 3: 휴식과 관찰 (The Rest)
+높은 바위나 나무 위에 올라가 평화롭게 숲을 내려다보는 샷입니다.
+
+Prompt (English):
+
+A medium shot of the silver tabby cat sitting calmly on a mossy rock, looking out over a vast forest at golden hour. The glowing blue butterfly lands on the tip of the cat's nose. The cat looks cross-eyed at it playfully. Warm sunset lighting, peaceful and serene atmosphere. The camera gently pans around the cat.
+
+설명: 이끼 낀 바위 위에 앉아 황금빛 노을이 지는 숲을 바라보는 미디엄 샷. 아까 쫓던 나비가 고양이 코끝에 앉아 있고, 고양이가 장난스럽게 쳐다봄. 카메라가 고양이 주변을 부드럽게 회전(Pan)하며 평화로운 분위기 연출.

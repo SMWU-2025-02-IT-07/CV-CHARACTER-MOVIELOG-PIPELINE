@@ -26,6 +26,7 @@ class SceneOut(BaseModel):
     title: str
     description: str
     duration: int
+    image_prompt: Optional[str] = None
     image_url: Optional[str] = None
 
 class CreateScenarioResponse(BaseModel):
@@ -51,6 +52,7 @@ class SceneLLM(BaseModel):
     title: str
     description: str
     duration: int
+    image_prompt: str
 
 class ScenesLLM(BaseModel):
     model_config = ConfigDict(extra="forbid")

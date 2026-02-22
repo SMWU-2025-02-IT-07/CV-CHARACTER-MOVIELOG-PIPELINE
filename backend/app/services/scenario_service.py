@@ -50,22 +50,43 @@ You create simple, realistic storyboard scenes for a short video.
 Language: {lang}
 
 OUTPUT MUST BE VALID JSON ONLY with this schema:
-{{"scenes":[{{"id":1,"title":"...","description":"...","duration":4}}, ...]}}
+{{
+  "scenes":[
+    {{
+      "id":1,
+      "title":"...",
+      "description":"...",
+      "duration":4,
+      "image_prompt":"..."
+    }},
+    ...
+  ]
+}}
+
+Field rules (MUST follow):
+- description: storyboard caption for humans (ONE short sentence).
+  - Must describe only what is visible on screen (camera view + action + key objects).
+  - NO camera specs, NO lighting specs, NO style keywords, NO prompt-like wording.
+- image_prompt: image-generation prompt for a model like Stable Diffusion/ComfyUI.
+  - Include shot/composition (e.g., wide shot / medium shot / close-up), camera angle, lighting, style, background, key props.
+  - Must keep the same visible action as description.
+  - Do NOT add new characters.
+  - Keep it concise but usable (<= 220 chars if ko, otherwise <= 300 chars).
+  - image_prompt must be written in English. Use comma-separated prompt keywords.
 
 Hard constraints (MUST follow):
 - Scene count must be exactly {sc}.
 - Main character MUST be "{req.character.name}" in every scene.
 - Do NOT introduce any new named characters (no barista, friend, etc.).
-- Setting MUST stay "{req.brief.where}" only (no alley, street, other places).
+- Setting MUST stay "{req.brief.where}" only (no other places).
 - Actions MUST match this core action: "{anchor}".
 - No story, no mystery, no narration, no metaphors, no dramatic tone.
-- Each description must be ONE short sentence (<= 40 Korean characters if ko, otherwise <= 120 chars).
-- Each description must describe only what is visible on screen (camera view + action + key objects).
+- description length: <= 40 Korean characters if ko, otherwise <= 120 chars.
 - duration should be a small integer 3~6.
 
-Styling guide:
-- Think of 3 cuts: (1) establishing shot, (2) action/detail shot, (3) closing shot.
-- Titles must be plain and functional (e.g., "카페 전경", "노트북 작업", "커피 한 모금").
+Shot plan guide:
+- Think of {sc} cuts: (1) establishing shot, (2) action/detail shot, (3) closing shot.
+- Titles must be plain and functional (e.g., "장소 전경", "작업 장면", "마무리 동작").
 
 Character:
 - name: {req.character.name}
@@ -82,7 +103,6 @@ def _build_regen_prompt(req: RegenerateScenarioRequest) -> str:
     sc = req.options.scene_count
     lang = req.options.lang
 
-    # 사용자가 준 수정사항을 강제 반영
     edits = "\n".join([f"- scene_id={s.id}: {s.description}" for s in req.scenes])
 
     return f"""
@@ -90,7 +110,29 @@ You create simple, realistic storyboard scenes for a short video.
 Language: {lang}
 
 OUTPUT MUST BE VALID JSON ONLY with this schema:
-{{"scenes":[{{"id":1,"title":"...","description":"...","duration":4}}, ...]}}
+{{
+  "scenes":[
+    {{
+      "id":1,
+      "title":"...",
+      "description":"...",
+      "duration":4,
+      "image_prompt":"..."
+    }},
+    ...
+  ]
+}}
+
+Field rules (MUST follow):
+- description: storyboard caption for humans (ONE short sentence).
+  - Must describe only what is visible on screen (camera view + action + key objects).
+  - NO camera specs, NO lighting specs, NO style keywords, NO prompt-like wording.
+- image_prompt: image-generation prompt for a model like Stable Diffusion/ComfyUI.
+  - Include shot/composition, camera angle, lighting, style, background, key props.
+  - Must reflect the final description accurately.
+  - Do NOT add new characters.
+  - Keep it concise but usable (<= 300 chars).
+  - image_prompt must be written in English. Use comma-separated prompt keywords.
 
 Hard constraints (MUST follow):
 - Scene count must be exactly {sc}.
@@ -98,8 +140,7 @@ Hard constraints (MUST follow):
 - Use the same main character implied by the edits and reference image.
 - Setting stays consistent (do not add new places unless explicitly in edits).
 - No story, no mystery, no narration, no metaphors, no dramatic tone.
-- Each description must be ONE short sentence (<= 25 Korean characters if ko, otherwise <= 120 chars).
-- Each description must describe only what is visible on screen (camera view + action + key objects).
+- description length: <= 40 Korean characters if ko, otherwise <= 120 chars.
 - duration should be a small integer 3~6.
 - You MUST apply the user edits below:
   If an edit references scene_id=k, the output scene with id=k must reflect that edit closely.
@@ -110,7 +151,7 @@ Reference image (character):
 User edits:
 {edits}
 
-Styling guide:
+Shot plan guide:
 - 3 cuts: (1) establishing, (2) action/detail, (3) closing.
 - Titles must be plain and functional.
 """.strip()
@@ -126,6 +167,7 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
             title=s["title"],
             description=s["description"],
             duration=s["duration"],
+            image_prompt=s["image_prompt"],
             image_url=None,
         )
         for s in data["scenes"]
@@ -197,6 +239,7 @@ def regenerate_scenario(scenario_id: str, req: RegenerateScenarioRequest) -> Reg
             title=s["title"],
             description=s["description"],
             duration=s["duration"],
+            image_prompt=s["image_prompt"],
             image_url=None,
         )
         for s in data["scenes"]

@@ -11,6 +11,8 @@ interface ApiScene {
   description: string;
   duration: number;
   image_url?: string | null;
+  image_prompt?: string | null;
+
 }
 
 interface ApiScenarioResponse {
@@ -25,6 +27,7 @@ export interface SceneOutput {
   videoUrl?: string;
   title?: string;
   duration: number;
+  imagePrompt?: string;
 }
 
 export interface ScenarioResult {
@@ -99,6 +102,7 @@ function mapApiScene(scene: ApiScene): SceneOutput {
     description: scene.description,
     duration: scene.duration,
     imageUrl: scene.image_url ?? undefined,
+    imagePrompt: scene.image_prompt ?? undefined,
   };
 }
 

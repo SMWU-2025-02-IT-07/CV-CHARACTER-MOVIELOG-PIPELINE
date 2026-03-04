@@ -18,7 +18,10 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_handler(request: Request, exc: Exception):
+        import traceback
+        print(f"Unhandled exception: {exc}")
+        print(traceback.format_exc())
         return JSONResponse(
             status_code=500,
-            content={"error": {"code": "INTERNAL_ERROR", "message": "Unexpected server error"}},
+            content={"error": {"code": "INTERNAL_ERROR", "message": f"Unexpected server error: {str(exc)}"}},
         )

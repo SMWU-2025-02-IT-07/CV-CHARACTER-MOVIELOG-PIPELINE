@@ -4,6 +4,7 @@ from typing import Optional, List
 class CharacterIn(BaseModel):
     name: str = Field(..., min_length=1)
     image_url: str = Field(..., min_length=1)
+    description: Optional[str] = None  # Sonnet이 추출한 캐릭터 설명
 
 class BriefIn(BaseModel):
     who: str = Field(..., min_length=1)
@@ -19,6 +20,7 @@ class CreateScenarioRequest(BaseModel):
     character: CharacterIn
     brief: BriefIn
     options: ScenarioOptions = ScenarioOptions()
+    skip_character_analysis: bool = False  # Sonnet 캐릭터 분석 스킵 옵션
 
 class SceneOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -27,6 +29,7 @@ class SceneOut(BaseModel):
     description: str
     duration: int
     image_prompt: Optional[str] = None
+    video_prompt: Optional[str] = None
     image_url: Optional[str] = None
 
 class CreateScenarioResponse(BaseModel):
@@ -48,12 +51,11 @@ class RegenerateScenarioResponse(BaseModel):
 
 class SceneLLM(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    id: int
-    title: str
-    description: str
-    duration: int
-    image_prompt: str
+    scene_number: int
+    scenario_ko: str
+    video_prompt_en: str
 
 class ScenesLLM(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    character_description: str
     scenes: list[SceneLLM]

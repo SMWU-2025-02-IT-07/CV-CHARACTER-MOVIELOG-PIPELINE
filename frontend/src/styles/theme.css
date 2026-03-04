@@ -154,8 +154,8 @@
 ═══════════════════════════════════════════ */
 @layer base {
   *, *::before, *::after {
-    @apply border-border outline-ring/50;
     box-sizing: border-box;
+    border-color: var(--border);
   }
 
   html {

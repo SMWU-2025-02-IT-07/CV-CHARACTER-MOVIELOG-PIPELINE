@@ -3,7 +3,7 @@ import base64
 import boto3
 from app.core.config import settings
 from app.core.errors import AppError
-from app.schemas.scenario import ScenesLLM
+from app.schemas.scenario import ScenesLLM, CreateScenarioRequest
 
 bedrock = boto3.client('bedrock-runtime', region_name=settings.aws_region)
 

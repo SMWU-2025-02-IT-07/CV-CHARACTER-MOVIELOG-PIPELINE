@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 from pathlib import Path
 from typing import Optional, List
+import boto3
 
 from app.core.config import settings
 from app.core.errors import AppError
@@ -74,11 +75,28 @@ Field rules (MUST follow):
   - Do NOT add new characters.
   - Keep it concise but usable (<= 300 chars).
   - image_prompt must be written in English. Use comma-separated prompt keywords.
-- video_prompt: video-generation prompt for LTX 2.0 model.
-  - Describe the motion, camera movement, and visual flow for video generation.
-  - Focus on dynamic elements: character actions, camera moves, environmental changes.
-  - Must be written in English and optimized for LTX 2.0.
-  - Keep it concise but descriptive (<= 200 chars).
+- video_prompt: Write as a single flowing paragraph in present tense.
+  Must include in this order:
+    1. Shot type (e.g. medium shot, close-up, wide establishing shot)
+    2. Character action — use motion verbs, physical gestures only. NO abstract emotions.
+    3. Camera movement (e.g. slow tracking shot follows from behind, camera pushes in)
+    4. Environment & lighting (e.g. sunlit forest path, warm golden hour, falling leaves)
+    5. Mood/style keywords (e.g. kawaii animation style, soft warm tones, whimsical)
+  Target length: 4–6 sentences (~150–300 words). Do NOT compress into one sentence.
+  
+  EMOTION RULES - NEVER use abstract emotion words:
+  ❌ "walks happily" → ✅ "walks with a slight bounce in each step, head tilting side to side"
+  ❌ "looks curious" → ✅ "tilts head slowly to one side, eyes wide, leaning slightly forward"
+  
+  CHARACTER CONSISTENCY:
+  - Use short character identifier in every video_prompt: "a small blue star-shaped plush character with a white face and yellow S emblem"
+  - Character appearance must be identical in every scene.
+  
+  SCENE CONTINUITY:
+  - Scenes must feel like continuous cuts from the same video.
+  - Environment and lighting must remain consistent across all scenes unless explicitly changed.
+  - For scene 2 and beyond, reference where the previous scene ended.
+    Example: "Continuing from the forest path, the character now approaches a wooden bridge..."
 
 Hard constraints (MUST follow):
 - Scene count must be exactly {sc}.
@@ -100,7 +118,43 @@ User edits:
 Shot plan guide:
 - 3 cuts: (1) establishing, (2) action/detail, (3) closing.
 - Titles must be plain and functional.
+
+Video prompt template (follow this exact structure):
+"[SHOT TYPE], [CHARACTER_ID] [ACTION with physical detail].
+The camera [CAMERA MOVEMENT] as [WHAT HAPPENS NEXT].
+[ENVIRONMENT description: location, time, atmosphere].
+[LIGHTING: quality, color, direction].
+[STYLE: animation style, mood keywords, texture]."
+
+Example video_prompt:
+"Medium shot, a small blue star-shaped plush character with a white face bounces forward along a sunlit dirt path, arms swaying gently with each step. The camera tracks slowly from behind, following at eye level as golden leaves drift down around the character. Warm afternoon light filters through tall trees, casting soft dappled shadows on the path. Kawaii 3D animation style, soft warm tones, whimsical and gentle."
 """.strip()
+
+def generate_scenes_json(prompt: str) -> dict:
+    """LLM을 사용해서 씬 JSON 생성"""
+    try:
+        bedrock = boto3.client('bedrock-runtime', region_name=settings.aws_region)
+        model_id = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4000,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7
+        }
+        
+        response = bedrock.invoke_model(
+            modelId=model_id,
+            body=json.dumps(body)
+        )
+        
+        response_body = json.loads(response['body'].read())
+        raw_text = response_body['content'][0]['text']
+        
+        return json.loads(raw_text)
+        
+    except Exception as e:
+        raise AppError("UPSTREAM_ERROR", f"LLM call failed: {str(e)}", status_code=502)
 
 def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
     print(f"\n=== Sonnet으로 캐릭터 분석 + 씬 생성 (통합) ===")

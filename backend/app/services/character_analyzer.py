@@ -1,11 +1,73 @@
 import json
 import base64
 import boto3
+from PIL import Image
+import io
 from app.core.config import settings
 from app.core.errors import AppError
 from app.schemas.scenario import ScenesLLM, CreateScenarioRequest
 
 bedrock = boto3.client('bedrock-runtime', region_name=settings.aws_region)
+
+def _resize_image_if_needed(image_base64: str, max_size_mb: float = 4.5) -> str:
+    """이미지 크기가 제한을 초과하면 리사이즈"""
+    try:
+        # base64 데이터 크기 확인 (MB)
+        current_size_mb = len(image_base64) * 3 / 4 / (1024 * 1024)
+        
+        if current_size_mb <= max_size_mb:
+            return image_base64
+        
+        # 이미지 디코딩 및 리사이즈
+        image_data = base64.b64decode(image_base64)
+        image = Image.open(io.BytesIO(image_data))
+        
+        # RGB로 변환 (투명도 제거)
+        if image.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+            image = background
+        
+        # 점진적 크기 축소
+        quality = 85
+        while True:
+            # 크기 축소
+            ratio = (max_size_mb / current_size_mb) ** 0.6
+            new_width = max(256, int(image.width * ratio))
+            new_height = max(256, int(image.height * ratio))
+            
+            resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # JPEG로 압축 저장
+            buffer = io.BytesIO()
+            resized_image.save(buffer, format='JPEG', quality=quality, optimize=True)
+            
+            # 결과 크기 확인
+            result_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            result_size_mb = len(result_base64) * 3 / 4 / (1024 * 1024)
+            
+            if result_size_mb <= max_size_mb or quality <= 30:
+                return result_base64
+            
+            quality -= 10
+            current_size_mb = result_size_mb
+        
+    except Exception as e:
+        print(f"이미지 리사이즈 실패: {e}")
+        # 비상 시 기본 압축
+        try:
+            image_data = base64.b64decode(image_base64)
+            image = Image.open(io.BytesIO(image_data))
+            image = image.resize((512, 512), Image.Resampling.LANCZOS)
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            buffer = io.BytesIO()
+            image.save(buffer, format='JPEG', quality=50)
+            return base64.b64encode(buffer.getvalue()).decode('utf-8')
+        except:
+            return image_base64
 
 def extract_character_description_and_scenes(image_base64: str, req: CreateScenarioRequest) -> dict:
     """
@@ -19,6 +81,9 @@ def extract_character_description_and_scenes(image_base64: str, req: CreateScena
         {"character_description": "...", "scenes": [...]} 형태의 데이터
     """
     try:
+        # 이미지 크기 체크 및 리사이즈
+        resized_image = _resize_image_if_needed(image_base64)
+        
         model_id = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
         
         # 상황 텍스트 생성
@@ -31,8 +96,8 @@ def extract_character_description_and_scenes(image_base64: str, req: CreateScena
                     "type": "image",
                     "source": {
                         "type": "base64",
-                        "media_type": "image/png",
-                        "data": image_base64
+                        "media_type": "image/jpeg",
+                        "data": resized_image
                     }
                 },
                 {

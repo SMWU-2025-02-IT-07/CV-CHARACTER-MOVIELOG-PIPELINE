@@ -170,20 +170,23 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
     # 시나리오 ID 미리 생성
     scenario_id = str(uuid4())
 
-    # 씬 데이터 처리
+    # 씬 데이터 처리 - 연속성을 위한 메타데이터 추가
     scenes_out: list[SceneOut] = []
     
-    for s in data["scenes"]:
+    for i, s in enumerate(data["scenes"]):
         print(f"씬 {s['scene_number']} 생성 완료")
+        
+        # 첫 번째 씬은 원본 캐릭터 이미지, 이후는 이전 씬의 last_frame 사용 예정
+        input_image_source = "character_original" if i == 0 else f"scene_{i}_last_frame"
         
         scene_out = SceneOut(
             id=s["scene_number"],
-            title=f"씬 {s['scene_number']}",  # 기본 제목
+            title=f"씬 {s['scene_number']}",
             description=s["scenario_ko"],
-            duration=4,  # 기본 4초
-            image_prompt="",
+            duration=4,
+            image_prompt="",  # ComfyUI에서는 video_prompt만 사용
             video_prompt=s["video_prompt_en"],
-            image_url=None,
+            image_url=None,  # 생성 후 업데이트됨
         )
         scenes_out.append(scene_out)
 
@@ -191,6 +194,7 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
         "scenario_id": scenario_id,
         "request": req.model_dump(mode="json"),
         "scenes": [s.model_dump(mode="json") for s in scenes_out],
+        "character_description": data.get("character_description", ""),  # 연속성을 위한 캐릭터 설명 저장
     }
 
     try:
@@ -208,6 +212,52 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
 
     return CreateScenarioResponse(scenario_id=scenario_id, scenes=scenes_out)
 
+
+def get_scene_for_generation(scenario_id: str, scene_id: int) -> dict:
+    """ComfyUI 생성을 위한 특정 씬 정보 반환"""
+    scenario = get_scenario(scenario_id)
+    
+    scene = next((s for s in scenario.scenes if s.id == scene_id), None)
+    if not scene:
+        raise AppError("NOT_FOUND", f"Scene {scene_id} not found", status_code=404)
+    
+    # 씬별 입력 이미지 소스 결정
+    input_image_source = "character_original" if scene_id == 1 else f"scene_{scene_id-1}_last_frame"
+    
+    return {
+        "scene_id": scene_id,
+        "video_prompt": scene.video_prompt,
+        "input_image_source": input_image_source,
+        "duration": scene.duration
+    }
+
+def update_scene_result(scenario_id: str, scene_id: int, video_url: str, last_frame_filename: str) -> None:
+    """씬 생성 완료 후 결과 업데이트"""
+    p = _scenario_path(scenario_id)
+    if not p.exists():
+        raise AppError("NOT_FOUND", f"Scenario not found: {scenario_id}", status_code=404)
+    
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+        
+        # 해당 씬 찾아서 업데이트
+        for scene in payload["scenes"]:
+            if scene["id"] == scene_id:
+                scene["image_url"] = video_url
+                scene["last_frame_filename"] = last_frame_filename
+                break
+        
+        # 파일 저장
+        p.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+        
+        # S3 업데이트
+        upload_scenario_to_s3(scenario_id, payload)
+        
+    except Exception as e:
+        raise AppError("STORAGE_ERROR", f"Failed to update scene result: {str(e)}", status_code=500)
 
 def get_scenario(scenario_id: str) -> CreateScenarioResponse:
     p = _scenario_path(scenario_id)

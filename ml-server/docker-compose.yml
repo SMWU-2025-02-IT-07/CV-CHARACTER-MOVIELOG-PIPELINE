@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  comfyui:
+    build: .
+    ports:
+      - "8188:8188"
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+      - ./custom_nodes:/app/custom_nodes
+      - ./user:/app/user
+      - ./output:/app/output
+      - ./input:/app/input
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_PREFIX=${S3_PREFIX:-outputs/}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - FRONTEND_WEBHOOK_URL=${FRONTEND_WEBHOOK_URL}
+    restart: unless-stopped

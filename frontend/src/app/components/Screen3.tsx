@@ -1,4 +1,4 @@
-﻿// src/app/components/Screen3.tsx
+// src/app/components/Screen3.tsx
 
 import { Loader2, Sparkles, Film, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -31,7 +31,7 @@ export function Screen3({ onComplete }: Screen3Props) {
       const scene = scenes[i];
       setSceneStatuses(prev => ({ ...prev, [scene.id]: 'generating' }));
       try {
-        const videoUrl = await AIService.generateSceneVideo(scene.id, scene.description, characterData.imageUrl, scenarioId);
+        const videoUrl = await AIService.generateSceneVideo(scenarioId, scene.id, characterData.imageUrl);
         updatedScenes[i] = { ...updatedScenes[i], videoUrl };
         setScenes(updatedScenes);
         setSceneStatuses(prev => ({ ...prev, [scene.id]: 'completed' }));
@@ -48,7 +48,7 @@ export function Screen3({ onComplete }: Screen3Props) {
     const sceneIndex = scenes.findIndex(s => s.id === sceneId);
     if (sceneIndex === -1) return;
     try {
-      const videoUrl = await AIService.generateSceneVideo(sceneId, scenes[sceneIndex].description, characterData.imageUrl, scenarioId);
+      const videoUrl = await AIService.generateSceneVideo(scenarioId, sceneId, characterData.imageUrl);
       const updatedScenes = [...scenes];
       updatedScenes[sceneIndex] = { ...updatedScenes[sceneIndex], videoUrl };
       setScenes(updatedScenes);
@@ -63,12 +63,12 @@ export function Screen3({ onComplete }: Screen3Props) {
   const handleMergeAndComplete = async () => {
     try {
       const videoUrls = scenes.map(scene => scene.videoUrl).filter((url): url is string => !!url);
-      if (videoUrls.length === 0) { alert('?앹꽦???곸긽???놁뒿?덈떎.'); return; }
+      if (videoUrls.length === 0) { alert('생성된 영상이 없습니다.'); return; }
       const finalUrl = await AIService.mergeVideos(videoUrls);
       setFinalVideoUrl(finalUrl);
       onComplete();
     } catch (error) {
-      alert('?곸긽 蹂묓빀???ㅽ뙣?덉뒿?덈떎.');
+      alert('영상 병합에 실패했습니다.');
     }
   };
 
@@ -92,9 +92,10 @@ export function Screen3({ onComplete }: Screen3Props) {
       <div className="fade-up fade-up-1" style={{ marginBottom: '1.75rem' }}>
         <div className="eyebrow" style={{ marginBottom: '0.75rem' }}>Scene Rendering</div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>
-          ?λ㈃蹂?<span className="gradient-brand-text">?곸긽 ?앹꽦</span> 以?        </h1>
+          씬별<span className="gradient-brand-text">영상 생성</span> 중
+        </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-          媛??λ㈃???곸긽???뺤씤?섍퀬 留덉쓬???ㅼ? ?딆쑝硫??ъ깮?깊븷 ???덉뒿?덈떎
+          각 씬의 영상을 확인하고 마음에 들지 않으면 재생성할 수 있습니다
         </p>
       </div>
 
@@ -161,20 +162,23 @@ export function Screen3({ onComplete }: Screen3Props) {
                     {cfg.label}
                   </span>
                 </div>
-                {status === 'completed' && (
+                {(status === 'completed' || status === 'error') && (
                   <button
                     onClick={() => regenerateScene(scene.id)}
                     disabled={regeneratingScene === scene.id}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '5px',
-                      padding: '5px 10px', borderRadius: 'calc(var(--radius) - 4px)',
-                      background: 'transparent', border: '1px solid var(--glass-border)',
-                      color: 'var(--text-secondary)', fontSize: '0.7rem', cursor: 'pointer',
+                      padding: '6px 12px', borderRadius: 'calc(var(--radius) - 2px)',
+                      background: status === 'error' ? 'rgba(239,68,68,0.1)' : 'transparent', 
+                      border: `1px solid ${status === 'error' ? 'rgba(239,68,68,0.3)' : 'var(--glass-border)'}`,
+                      color: status === 'error' ? '#fca5a5' : 'var(--text-secondary)', 
+                      fontSize: '0.7rem', cursor: 'pointer',
                       fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', textTransform: 'uppercase',
+                      transition: 'all 0.2s ease',
                     }}
                   >
-                    <RefreshCw size={11} style={{ animation: regeneratingScene === scene.id ? 'spin 0.8s linear infinite' : 'none' }} />
-                    REDO
+                    <RefreshCw size={12} style={{ animation: regeneratingScene === scene.id ? 'spin 0.8s linear infinite' : 'none' }} />
+                    {status === 'error' ? 'RETRY' : 'REGENERATE'}
                   </button>
                 )}
               </div>
@@ -267,7 +271,7 @@ export function Screen3({ onComplete }: Screen3Props) {
             }}
           >
             <Sparkles size={18} />
-            ?곸긽 蹂묓빀 諛??꾨즺
+            영상 병합 및 완료
           </button>
         </div>
       ) : (
@@ -283,7 +287,7 @@ export function Screen3({ onComplete }: Screen3Props) {
           }} />
           <div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              ?곸긽???앹꽦?섍퀬 ?덉뒿?덈떎. ?좎떆留?湲곕떎?ㅼ＜?몄슂...
+              영상을 생성하고 있습니다. 잠시만 기다려주세요...
             </p>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
               {completedCount}/{totalCount} SCENES COMPLETE
@@ -294,9 +298,11 @@ export function Screen3({ onComplete }: Screen3Props) {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse-dot { 
+          0%, 100% { opacity: 1; } 
+          50% { opacity: 0.5; } 
+        }
       `}</style>
     </div>
   );
 }
-
-

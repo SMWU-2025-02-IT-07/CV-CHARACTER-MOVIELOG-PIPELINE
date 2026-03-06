@@ -215,3 +215,7 @@ websocket-client==1.9.0
 widgetsnbextension==4.0.15
 yarl==1.22.0
 zipp==1.0.0
+boto3==1.35.97
+fastapi==0.115.6
+uvicorn==0.34.0
+python-multipart==0.0.18

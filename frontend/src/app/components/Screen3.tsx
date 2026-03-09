@@ -1,16 +1,13 @@
 // src/app/components/Screen3.tsx
 
-import { Loader2, Sparkles, Film, RefreshCw } from "lucide-react";
+import { Sparkles, Film, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { AIService } from "@/services/ai.service";
-import { Button } from "@/app/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
-interface Screen3Props {
-  onComplete: () => void;
-}
-
-export function Screen3({ onComplete }: Screen3Props) {
+export function Screen3() {
+  const navigate = useNavigate();
   const { scenes, characterData, scenarioId, setScenes, setFinalVideoUrl } = useAppContext();
   const [sceneStatuses, setSceneStatuses] = useState<{
     [key: number]: 'pending' | 'generating' | 'completed' | 'error'
@@ -66,7 +63,7 @@ export function Screen3({ onComplete }: Screen3Props) {
       if (videoUrls.length === 0) { alert('생성된 영상이 없습니다.'); return; }
       const finalUrl = await AIService.mergeVideos(videoUrls);
       setFinalVideoUrl(finalUrl);
-      onComplete();
+      navigate("/result");
     } catch (error) {
       alert('영상 병합에 실패했습니다.');
     }

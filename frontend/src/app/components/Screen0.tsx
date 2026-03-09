@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, RefObject } from "react";
+import { useNavigate } from "react-router-dom";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');`;
 
@@ -465,7 +466,10 @@ function Footer({ onStart }: { onStart: () => void }) {
 }
 
 /* ─── MAIN EXPORT ────────────────────────────────── */
-export default function Screen0({ onStart }: { onStart: () => void }) {
+export default function Screen0() {
+  const navigate = useNavigate();
+  const onStart = () => navigate("/create");
+
   return (
     <>
       <style>{GLOBAL_CSS}</style>

@@ -3,11 +3,7 @@
 import { Play, Download, Share2, RefreshCw, Sparkles, Pause, SkipForward, SkipBack, CheckCircle } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAppContext } from "@/context/AppContext";
-
-interface Screen4Props {
-  onReset: () => void;
-  onRestart: () => void;
-}
+import { useNavigate } from "react-router-dom";
 
 interface Playlist {
   videos: string[];
@@ -15,7 +11,8 @@ interface Playlist {
   isPlaylist: boolean;
 }
 
-export function Screen4({ onReset, onRestart }: Screen4Props) {
+export function Screen4() {
+  const navigate = useNavigate();
   const { finalVideoUrl, resetAll } = useAppContext();
   const [isPlaying, setIsPlaying] = useState(false);
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
@@ -80,7 +77,10 @@ export function Screen4({ onReset, onRestart }: Screen4Props) {
     }
   };
 
-  const handleRestart = () => { resetAll(); onRestart(); };
+  const handleRestart = () => {
+    resetAll();
+    navigate("/create");
+  };
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 py-6 relative z-10">
@@ -241,7 +241,7 @@ export function Screen4({ onReset, onRestart }: Screen4Props) {
       {/* Bottom Actions */}
       <div className="fade-up fade-up-3" style={{ display: 'flex', gap: '10px', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
         <button
-          onClick={onReset}
+          onClick={() => navigate("/scenario")}
           style={{
             flex: 1, minWidth: '140px', height: '48px',
             background: 'transparent', border: '1px solid var(--glass-border)',

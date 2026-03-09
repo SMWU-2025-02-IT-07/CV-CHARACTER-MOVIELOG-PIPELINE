@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 from pathlib import Path
 from typing import Optional, List
+import boto3
 
 from app.core.config import settings
 from app.core.errors import AppError
@@ -14,7 +15,8 @@ from app.schemas.scenario import (
     RegenerateScenarioResponse,
     SceneOut,
 )
-from app.services.llm_openai import generate_scenes_json
+from app.services.character_analyzer import extract_character_description_and_scenes
+from app.services.s3_service import upload_scenario_to_s3
 
 
 def _ensure_dir() -> Path:
@@ -38,67 +40,6 @@ def _normalize_scene_duration(scene: dict) -> dict:
         return normalized
     return scene
 
-def _build_create_prompt(req: CreateScenarioRequest) -> str:
-    sc = req.options.scene_count
-    lang = req.options.lang
-
-    # brief를 한 문장으로 고정 (행동 범위 고정용)
-    anchor = f"{req.character.name}가 {req.brief.where} {req.brief.what} {req.brief.how}"
-
-    return f"""
-You create simple, realistic storyboard scenes for a short video.
-Language: {lang}
-
-OUTPUT MUST BE VALID JSON ONLY with this schema:
-{{
-  "scenes":[
-    {{
-      "id":1,
-      "title":"...",
-      "description":"...",
-      "duration":4,
-      "image_prompt":"..."
-    }},
-    ...
-  ]
-}}
-
-Field rules (MUST follow):
-- description: storyboard caption for humans (ONE short sentence).
-  - Must describe only what is visible on screen (camera view + action + key objects).
-  - NO camera specs, NO lighting specs, NO style keywords, NO prompt-like wording.
-- image_prompt: image-generation prompt for a model like Stable Diffusion/ComfyUI.
-  - Include shot/composition (e.g., wide shot / medium shot / close-up), camera angle, lighting, style, background, key props.
-  - Must keep the same visible action as description.
-  - Do NOT add new characters.
-  - Keep it concise but usable (<= 220 chars if ko, otherwise <= 300 chars).
-  - image_prompt must be written in English. Use comma-separated prompt keywords.
-
-Hard constraints (MUST follow):
-- Scene count must be exactly {sc}.
-- Main character MUST be "{req.character.name}" in every scene.
-- Do NOT introduce any new named characters (no barista, friend, etc.).
-- Setting MUST stay "{req.brief.where}" only (no other places).
-- Actions MUST match this core action: "{anchor}".
-- No story, no mystery, no narration, no metaphors, no dramatic tone.
-- description length: <= 40 Korean characters if ko, otherwise <= 120 chars.
-- duration should be a small integer 3~6.
-
-Shot plan guide:
-- Think of {sc} cuts: (1) establishing shot, (2) action/detail shot, (3) closing shot.
-- Titles must be plain and functional (e.g., "장소 전경", "작업 장면", "마무리 동작").
-
-Character:
-- name: {req.character.name}
-- image_url: {req.character.image_url}
-
-Brief:
-- who: {req.brief.who}
-- where: {req.brief.where}
-- what: {req.brief.what}
-- how: {req.brief.how}
-""".strip()
-
 def _build_regen_prompt(req: RegenerateScenarioRequest) -> str:
     sc = req.options.scene_count
     lang = req.options.lang
@@ -117,7 +58,8 @@ OUTPUT MUST BE VALID JSON ONLY with this schema:
       "title":"...",
       "description":"...",
       "duration":4,
-      "image_prompt":"..."
+      "image_prompt":"...",
+      "video_prompt":"..."
     }},
     ...
   ]
@@ -133,6 +75,28 @@ Field rules (MUST follow):
   - Do NOT add new characters.
   - Keep it concise but usable (<= 300 chars).
   - image_prompt must be written in English. Use comma-separated prompt keywords.
+- video_prompt: Write as a single flowing paragraph in present tense.
+  Must include in this order:
+    1. Shot type (e.g. medium shot, close-up, wide establishing shot)
+    2. Character action — use motion verbs, physical gestures only. NO abstract emotions.
+    3. Camera movement (e.g. slow tracking shot follows from behind, camera pushes in)
+    4. Environment & lighting (e.g. sunlit forest path, warm golden hour, falling leaves)
+    5. Mood/style keywords (e.g. kawaii animation style, soft warm tones, whimsical)
+  Target length: 4–6 sentences (~150–300 words). Do NOT compress into one sentence.
+  
+  EMOTION RULES - NEVER use abstract emotion words:
+  ❌ "walks happily" → ✅ "walks with a slight bounce in each step, head tilting side to side"
+  ❌ "looks curious" → ✅ "tilts head slowly to one side, eyes wide, leaning slightly forward"
+  
+  CHARACTER CONSISTENCY:
+  - Use short character identifier in every video_prompt: "a small blue star-shaped plush character with a white face and yellow S emblem"
+  - Character appearance must be identical in every scene.
+  
+  SCENE CONTINUITY:
+  - Scenes must feel like continuous cuts from the same video.
+  - Environment and lighting must remain consistent across all scenes unless explicitly changed.
+  - For scene 2 and beyond, reference where the previous scene ended.
+    Example: "Continuing from the forest path, the character now approaches a wooden bridge..."
 
 Hard constraints (MUST follow):
 - Scene count must be exactly {sc}.
@@ -154,42 +118,146 @@ User edits:
 Shot plan guide:
 - 3 cuts: (1) establishing, (2) action/detail, (3) closing.
 - Titles must be plain and functional.
+
+Video prompt template (follow this exact structure):
+"[SHOT TYPE], [CHARACTER_ID] [ACTION with physical detail].
+The camera [CAMERA MOVEMENT] as [WHAT HAPPENS NEXT].
+[ENVIRONMENT description: location, time, atmosphere].
+[LIGHTING: quality, color, direction].
+[STYLE: animation style, mood keywords, texture]."
+
+Example video_prompt:
+"Medium shot, a small blue star-shaped plush character with a white face bounces forward along a sunlit dirt path, arms swaying gently with each step. The camera tracks slowly from behind, following at eye level as golden leaves drift down around the character. Warm afternoon light filters through tall trees, casting soft dappled shadows on the path. Kawaii 3D animation style, soft warm tones, whimsical and gentle."
 """.strip()
 
-def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
-    prompt = _build_create_prompt(req)
-    data = generate_scenes_json(prompt)
-
-    # data: {"scenes":[...]} 구조는 generate_scenes_json에서 이미 검증됨(ScenesLLM)
-    scenes_out: list[SceneOut] = [
-        SceneOut(
-            id=s["id"],
-            title=s["title"],
-            description=s["description"],
-            duration=s["duration"],
-            image_prompt=s["image_prompt"],
-            image_url=None,
+def generate_scenes_json(prompt: str) -> dict:
+    """LLM을 사용해서 씬 JSON 생성"""
+    try:
+        bedrock = boto3.client('bedrock-runtime', region_name=settings.aws_region)
+        model_id = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4000,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7
+        }
+        
+        response = bedrock.invoke_model(
+            modelId=model_id,
+            body=json.dumps(body)
         )
-        for s in data["scenes"]
-    ]
+        
+        response_body = json.loads(response['body'].read())
+        raw_text = response_body['content'][0]['text']
+        
+        return json.loads(raw_text)
+        
+    except Exception as e:
+        raise AppError("UPSTREAM_ERROR", f"LLM call failed: {str(e)}", status_code=502)
 
+def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
+    print(f"\n=== Sonnet으로 캐릭터 분석 + 씬 생성 (통합) ===")
+    
+    # base64 데이터에서 헤더 제거
+    image_data = req.character.image_url
+    if image_data.startswith('data:image'):
+        image_data = image_data.split(',')[1]
+    
+    # Sonnet으로 한 번에 처리
+    data = extract_character_description_and_scenes(image_data, req)
+    
+    # 시나리오 ID 미리 생성
     scenario_id = str(uuid4())
+
+    # 씬 데이터 처리 - 연속성을 위한 메타데이터 추가
+    scenes_out: list[SceneOut] = []
+    
+    for i, s in enumerate(data["scenes"]):
+        print(f"씬 {s['scene_number']} 생성 완료")
+        
+        # 첫 번째 씬은 원본 캐릭터 이미지, 이후는 이전 씬의 last_frame 사용 예정
+        input_image_source = "character_original" if i == 0 else f"scene_{i}_last_frame"
+        
+        scene_out = SceneOut(
+            id=s["scene_number"],
+            title=f"씬 {s['scene_number']}",
+            description=s["scenario_ko"],
+            duration=4,
+            image_prompt="",  # ComfyUI에서는 video_prompt만 사용
+            video_prompt=s["video_prompt_en"],
+            image_url=None,  # 생성 후 업데이트됨
+        )
+        scenes_out.append(scene_out)
+
     payload = {
         "scenario_id": scenario_id,
         "request": req.model_dump(mode="json"),
         "scenes": [s.model_dump(mode="json") for s in scenes_out],
+        "character_description": data.get("character_description", ""),  # 연속성을 위한 캐릭터 설명 저장
     }
 
     try:
+        # 로컬 파일 저장
         _scenario_path(scenario_id).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        
+        # S3에 시나리오 데이터 업로드
+        upload_scenario_to_s3(scenario_id, payload)
+        
     except Exception as e:
         raise AppError("STORAGE_ERROR", f"Failed to save scenario: {str(e)}", status_code=500)
 
     return CreateScenarioResponse(scenario_id=scenario_id, scenes=scenes_out)
 
+
+def get_scene_for_generation(scenario_id: str, scene_id: int) -> dict:
+    """ComfyUI 생성을 위한 특정 씬 정보 반환"""
+    scenario = get_scenario(scenario_id)
+    
+    scene = next((s for s in scenario.scenes if s.id == scene_id), None)
+    if not scene:
+        raise AppError("NOT_FOUND", f"Scene {scene_id} not found", status_code=404)
+    
+    # 씬별 입력 이미지 소스 결정
+    input_image_source = "character_original" if scene_id == 1 else f"scene_{scene_id-1}_last_frame"
+    
+    return {
+        "scene_id": scene_id,
+        "video_prompt": scene.video_prompt,
+        "input_image_source": input_image_source,
+        "duration": scene.duration
+    }
+
+def update_scene_result(scenario_id: str, scene_id: int, video_url: str, last_frame_filename: str) -> None:
+    """씬 생성 완료 후 결과 업데이트"""
+    p = _scenario_path(scenario_id)
+    if not p.exists():
+        raise AppError("NOT_FOUND", f"Scenario not found: {scenario_id}", status_code=404)
+    
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+        
+        # 해당 씬 찾아서 업데이트
+        for scene in payload["scenes"]:
+            if scene["id"] == scene_id:
+                scene["image_url"] = video_url
+                scene["last_frame_filename"] = last_frame_filename
+                break
+        
+        # 파일 저장
+        p.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+        
+        # S3 업데이트
+        upload_scenario_to_s3(scenario_id, payload)
+        
+    except Exception as e:
+        raise AppError("STORAGE_ERROR", f"Failed to update scene result: {str(e)}", status_code=500)
 
 def get_scenario(scenario_id: str) -> CreateScenarioResponse:
     p = _scenario_path(scenario_id)
@@ -240,6 +308,7 @@ def regenerate_scenario(scenario_id: str, req: RegenerateScenarioRequest) -> Reg
             description=s["description"],
             duration=s["duration"],
             image_prompt=s["image_prompt"],
+            video_prompt=s["video_prompt"],
             image_url=None,
         )
         for s in data["scenes"]

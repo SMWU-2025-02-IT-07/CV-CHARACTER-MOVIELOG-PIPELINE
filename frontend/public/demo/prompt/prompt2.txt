@@ -1,0 +1,35 @@
+🎬 LTX2 프롬프트 시나리오: 눈송이의 숲속 산책
+공통 설정 (Consistent Elements):
+
+Subject: Cute white fluffy round snowflake character (귀엽고 둥글고 복슬복슬한 하얀 눈송이 캐릭터)
+
+Background: Sun-dappled forest with green trees (햇살이 비치는 초록 숲 - 2번째 이미지 배경)
+
+Style: 3D animation style, soft lighting, cinematic (3D 애니메이션 스타일, 부드러운 조명)
+
+🎞️ SCENE 1: 숲속 산책 (The Walk)
+눈송이 캐릭터가 숲속 오솔길을 씩씩하게 걸어가는 장면입니다.
+
+Prompt (English):
+
+A low-angle tracking shot of a cute, round, fluffy white snowflake character walking happily through a lush green forest. The character has tiny legs and is marching forward. Sunlight filters through the tall trees in the background, creating a soft bokeh. Natural lighting, 3D animation style, peaceful atmosphere.
+
+설명: 귀여운 눈송이 캐릭터가 숲을 걸어가는 모습을 낮은 앵글에서 따라가며 촬영. 작은 다리로 씩씩하게 걷는 모습과 숲의 배경 흐림(보케) 효과 강조.
+
+🎞️ SCENE 2: 멈춤과 발견 ( The Pause)
+걷던 눈송이가 멈춰 서서 카메라(관객)를 발견하고 오른손을 천천히 드는 장면입니다.
+
+Prompt (English):
+
+A medium shot of the white snowflake character stopping in the middle of the forest path. The character looks directly at the camera with a friendly expression and slowly raises its right hand. The background is a sunny green forest. Cinematic lighting highlighting the soft texture of the snowflake.
+
+설명: 숲길 중간에 멈춰 선 캐릭터. 정면을 응시하며 오른손을 천천히 들어 올리는 동작에 집중. 캐릭터의 부드러운 질감이 햇빛에 드러남.
+
+🎞️ SCENE 3: 반가운 인사 (The Greeting)
+들고 있던 오른손을 흔들며 밝게 인사하는 장면입니다.
+
+Prompt (English):
+
+A close-up of the white snowflake character standing in the forest, waving its right hand enthusiastically at the camera. The character looks happy and welcoming. The movement is cute and bouncy. Warm sunlight streams through the green leaves in the background. High quality, detailed texture.
+
+설명: 클로즈업 샷. 들어 올린 **오른손을 신나게 흔들며 인사(Wave)**하는 모습. 통통 튀는 듯한 귀여운 움직임과 환영하는 분위기.

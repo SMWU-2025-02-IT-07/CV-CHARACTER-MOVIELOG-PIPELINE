@@ -1,0 +1,168 @@
+import json
+import base64
+import boto3
+from PIL import Image
+import io
+from app.core.config import settings
+from app.core.errors import AppError
+from app.schemas.scenario import ScenesLLM, CreateScenarioRequest
+
+bedrock = boto3.client('bedrock-runtime', region_name=settings.aws_region)
+
+def _resize_image_if_needed(image_base64: str, max_size_mb: float = 4.5) -> str:
+    """이미지 크기가 제한을 초과하면 리사이즈"""
+    try:
+        # base64 데이터 크기 확인 (MB)
+        current_size_mb = len(image_base64) * 3 / 4 / (1024 * 1024)
+        
+        if current_size_mb <= max_size_mb:
+            return image_base64
+        
+        # 이미지 디코딩 및 리사이즈
+        image_data = base64.b64decode(image_base64)
+        image = Image.open(io.BytesIO(image_data))
+        
+        # RGB로 변환 (투명도 제거)
+        if image.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+            image = background
+        
+        # 점진적 크기 축소
+        quality = 85
+        while True:
+            # 크기 축소
+            ratio = (max_size_mb / current_size_mb) ** 0.6
+            new_width = max(256, int(image.width * ratio))
+            new_height = max(256, int(image.height * ratio))
+            
+            resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # JPEG로 압축 저장
+            buffer = io.BytesIO()
+            resized_image.save(buffer, format='JPEG', quality=quality, optimize=True)
+            
+            # 결과 크기 확인
+            result_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            result_size_mb = len(result_base64) * 3 / 4 / (1024 * 1024)
+            
+            if result_size_mb <= max_size_mb or quality <= 30:
+                return result_base64
+            
+            quality -= 10
+            current_size_mb = result_size_mb
+        
+    except Exception as e:
+        print(f"이미지 리사이즈 실패: {e}")
+        # 비상 시 기본 압축
+        try:
+            image_data = base64.b64decode(image_base64)
+            image = Image.open(io.BytesIO(image_data))
+            image = image.resize((512, 512), Image.Resampling.LANCZOS)
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            buffer = io.BytesIO()
+            image.save(buffer, format='JPEG', quality=50)
+            return base64.b64encode(buffer.getvalue()).decode('utf-8')
+        except:
+            return image_base64
+
+def extract_character_description_and_scenes(image_base64: str, req: CreateScenarioRequest) -> dict:
+    """
+    Sonnet을 사용해서 캐릭터 분석 + 씬 생성을 한 번에 처리
+    
+    Args:
+        image_base64: 캐릭터 이미지 base64
+        req: 시나리오 요청 데이터
+    
+    Returns:
+        {"character_description": "...", "scenes": [...]} 형태의 데이터
+    """
+    try:
+        # 이미지 크기 체크 및 리사이즈
+        resized_image = _resize_image_if_needed(image_base64)
+        
+        model_id = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        
+        # 상황 텍스트 생성
+        situation = f"{req.character.name}는 {req.brief.where}에서 {req.brief.what} {req.brief.how}"
+        
+        messages = [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": resized_image
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": f"""Character: [이미지 첨부]
+Situation: {situation}
+Art style: 3D animation"""
+                }
+            ]
+        }]
+        
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4000,
+            "messages": messages,
+            "temperature": 0.7,
+            "system": """You are a video director specializing in LTX-2 AI video generation.
+
+Given a character description and a situation, generate exactly 3 connected scenes.
+
+Rules:
+- Scenes must flow naturally as a continuous story
+- CHARACTER DESCRIPTION must be repeated verbatim at the start of every video_prompt_en
+- Express emotion through posture, gesture, facial expression — never abstract labels
+- video_prompt_en must start with a motion verb
+- Write video_prompt_en as a single flowing paragraph, present tense
+
+Output strict JSON only, no markdown, no explanation:
+{
+  "character_description": "Fixed English description of character appearance. Used as prefix in all scenes.",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "scenario_ko": "한국어 시나리오 2-3문장. 생동감 있게.",
+      "video_prompt_en": "{character_description} + action, camera movement, environment, lighting, mood/style."
+    },
+    {
+      "scene_number": 2,
+      "scenario_ko": "...",
+      "video_prompt_en": "..."
+    },
+    {
+      "scene_number": 3,
+      "scenario_ko": "...",
+      "video_prompt_en": "..."
+    }
+  ]
+}"""
+        }
+        
+        response = bedrock.invoke_model(
+            modelId=model_id,
+            body=json.dumps(body)
+        )
+        
+        response_body = json.loads(response['body'].read())
+        raw_text = response_body['content'][0]['text']
+        
+        # JSON 파싱
+        parsed = json.loads(raw_text)
+        
+        # Pydantic 검증
+        ScenesLLM.model_validate(parsed)
+        
+        return parsed
+        
+    except Exception as e:
+        raise AppError("UPSTREAM_ERROR", f"Sonnet call failed: {str(e)}", status_code=502)

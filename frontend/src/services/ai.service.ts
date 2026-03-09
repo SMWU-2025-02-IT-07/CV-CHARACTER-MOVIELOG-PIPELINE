@@ -44,7 +44,7 @@ export interface ScenarioResult {
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_AWS_API_ENDPOINT ||
-  "http://localhost:8000"
+  "http://52.78.181.92:8000"
 ).replace(/\/$/, "");
 
 const API_V1_BASE_URL = API_BASE_URL.endsWith("/api/v1")
@@ -187,13 +187,57 @@ export const AIService = {
   },
 
   /**
-   * (추후 구현)
+   * Screen3: 씬 비디오 생성 (백엔드 API 연동)
    */
-  generateSceneVideo: async (): Promise<string> => {
-    throw new Error("Not implemented: connect generateSceneVideo API");
+  generateSceneVideo: async (
+    scenarioId: string,
+    sceneId: number,
+    imageUrl: string,
+    frameCount: number = 113,
+    seed: number = 10
+  ): Promise<string> => {
+    // 이미지를 blob으로 가져오기
+    const imageResponse = await fetch(imageUrl);
+    const imageBlob = await imageResponse.blob();
+    
+    // FormData 생성
+    const formData = new FormData();
+    formData.append('image', imageBlob, 'scene_image.jpg');
+    formData.append('frame_count', frameCount.toString());
+    formData.append('seed', seed.toString());
+    
+    // 백엔드 API를 통해 ComfyUI에 비디오 생성 요청
+    const response = await fetch(`${API_V1_BASE_URL}/comfyui/generate/${scenarioId}/${sceneId}`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Video generation failed: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    const promptId = result.prompt_id;
+    
+    // 상태 폴링으로 완료 대기
+    while (true) {
+      await new Promise(resolve => setTimeout(resolve, 10000)); // 10초 대기
+      
+      const statusResponse = await fetch(`${API_V1_BASE_URL}/comfyui/status/${scenarioId}/${sceneId}/${promptId}`);
+      const statusResult = await statusResponse.json();
+      
+      if (statusResult.status === 'completed') {
+        return statusResult.video_url; // S3 URL 반환
+      }
+      
+      if (statusResult.status === 'failed') {
+        throw new Error('Video generation failed');
+      }
+    }
   },
 
-  mergeVideos: async (): Promise<string> => {
-    throw new Error("Not implemented: connect mergeVideos API");
+  mergeVideos: async (videoUrls: string[]): Promise<string> => {
+    // 임시로 첫 번째 비디오 URL 반환 (실제 병합 로직은 추후 구현)
+    return videoUrls[0] || '';
   },
 };

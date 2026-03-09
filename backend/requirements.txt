@@ -1,7 +1,23 @@
+# FastAPI 관련
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.12.5
 pydantic-settings==2.12.0
 python-dotenv==1.2.1
+
+# HTTP 클라이언트
 httpx==0.28.1
+requests==2.32.3
+
+# AWS 관련
+boto3==1.35.97
+botocore==1.35.97
+
+# 이미지 처리
+Pillow==10.4.0
+
+# OpenAI (fallback)
 openai==1.55.0
+
+# 기타 유틸리티
+python-multipart==0.0.18

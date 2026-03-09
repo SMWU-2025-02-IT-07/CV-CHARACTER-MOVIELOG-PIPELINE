@@ -62,13 +62,13 @@ export function Screen3({ onComplete }: Screen3Props) {
 
   const handleMergeAndComplete = async () => {
     try {
-      const videoUrls = scenes.map(scene => scene.videoUrl).filter((url): url is string => !!url);
-      if (videoUrls.length === 0) { alert('생성된 영상이 없습니다.'); return; }
-      const finalUrl = await AIService.mergeVideos(videoUrls);
+      const sceneIdsToMerge = scenes.filter(scene => !!scene.videoUrl).map(scene => scene.id);
+      if (sceneIdsToMerge.length === 0) { alert('?�성???�상???�습?�다.'); return; }
+      const finalUrl = await AIService.mergeVideos(scenarioId, sceneIdsToMerge);
       setFinalVideoUrl(finalUrl);
       onComplete();
     } catch (error) {
-      alert('영상 병합에 실패했습니다.');
+      alert('?�상 병합???�패?�습?�다.');
     }
   };
 
@@ -92,10 +92,10 @@ export function Screen3({ onComplete }: Screen3Props) {
       <div className="fade-up fade-up-1" style={{ marginBottom: '1.75rem' }}>
         <div className="eyebrow" style={{ marginBottom: '0.75rem' }}>Scene Rendering</div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>
-          씬별<span className="gradient-brand-text">영상 생성</span> 중
+          ?�별<span className="gradient-brand-text">?�상 ?�성</span> �?
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-          각 씬의 영상을 확인하고 마음에 들지 않으면 재생성할 수 있습니다
+          �??�의 ?�상???�인?�고 마음???��? ?�으�??�생?�할 ???�습?�다
         </p>
       </div>
 
@@ -240,7 +240,7 @@ export function Screen3({ onComplete }: Screen3Props) {
                   </p>
                   <div style={{ marginTop: '12px', display: 'flex', gap: '12px' }}>
                     {[
-                      { label: 'DURATION', value: scene.duration + '초' },
+                      { label: 'DURATION', value: scene.duration + 's' },
                       { label: 'SCENE', value: `#${scene.id}` },
                     ].map(item => (
                       <div key={item.label}>
@@ -271,7 +271,7 @@ export function Screen3({ onComplete }: Screen3Props) {
             }}
           >
             <Sparkles size={18} />
-            영상 병합 및 완료
+            ?�상 병합 �??�료
           </button>
         </div>
       ) : (
@@ -287,7 +287,7 @@ export function Screen3({ onComplete }: Screen3Props) {
           }} />
           <div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              영상을 생성하고 있습니다. 잠시만 기다려주세요...
+              ?�상???�성?�고 ?�습?�다. ?�시�?기다?�주?�요...
             </p>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
               {completedCount}/{totalCount} SCENES COMPLETE

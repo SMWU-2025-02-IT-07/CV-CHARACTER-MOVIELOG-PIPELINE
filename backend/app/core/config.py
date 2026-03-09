@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     scenarios_dir: str = str((Path(__file__).resolve().parents[2] / "data" / "scenarios"))
 
+    #Mock
+    use_mock_llm: bool = False
+    allow_mock_fallback: bool = False
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [x.strip() for x in self.cors_origins.split(",") if x.strip()]

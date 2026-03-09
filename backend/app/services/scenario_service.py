@@ -130,8 +130,40 @@ Example video_prompt:
 "Medium shot, a small blue star-shaped plush character with a white face bounces forward along a sunlit dirt path, arms swaying gently with each step. The camera tracks slowly from behind, following at eye level as golden leaves drift down around the character. Warm afternoon light filters through tall trees, casting soft dappled shadows on the path. Kawaii 3D animation style, soft warm tones, whimsical and gentle."
 """.strip()
 
+def _mock_regen_scenes() -> dict:
+    return {
+        "scenes": [
+            {
+                "id": 1,
+                "title": "Scene 1",
+                "description": "고양이가 풀밭 가장자리에서 몸을 낮추고 나비를 발견한다.",
+                "duration": 4,
+                "image_prompt": "A cute cat crouching in the grass, spotting a butterfly, cinematic composition, soft sunlight, 3D animation style",
+                "video_prompt": "A cute 3D animated cat crouches low in the grass and notices a butterfly, then lifts its head with bright curious eyes as the camera slowly pushes in, soft sunlight and a gentle breeze moving through the field, cinematic and lively mood."
+            },
+            {
+                "id": 2,
+                "title": "Scene 2",
+                "description": "고양이가 나비를 향해 빠르게 뛰어가며 장난스럽게 움직인다.",
+                "duration": 4,
+                "image_prompt": "A playful cat running after a butterfly in a green meadow, dynamic motion, cinematic shot, 3D animation style",
+                "video_prompt": "A cute 3D animated cat dashes across the meadow chasing a butterfly, paws bouncing lightly and tail swinging with excitement as the camera tracks alongside, vivid outdoor light, energetic movement, playful cinematic feeling."
+            },
+            {
+                "id": 3,
+                "title": "Scene 3",
+                "description": "고양이가 풀밭을 신나게 뛰어다니다가 만족스러운 표정으로 멈춘다.",
+                "duration": 4,
+                "image_prompt": "A cheerful cat happily playing in a grassy field, final cinematic shot, soft golden light, 3D animation style",
+                "video_prompt": "A cute 3D animated cat keeps running happily through the grassy field, then slows down and stops with a satisfied expression, breathing lightly as the camera settles into a warm final shot, soft golden light and polished cinematic 3D animation mood."
+            }
+        ]
+    }
+
 def generate_scenes_json(prompt: str) -> dict:
     """LLM을 사용해서 씬 JSON 생성"""
+    use_mock_llm = getattr(settings, "use_mock_llm", False)
+    allow_mock_fallback = getattr(settings, "allow_mock_fallback", False)
     try:
         bedrock = boto3.client('bedrock-runtime', region_name=settings.aws_region)
         model_id = "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"
@@ -154,6 +186,12 @@ def generate_scenes_json(prompt: str) -> dict:
         return json.loads(raw_text)
         
     except Exception as e:
+        print(f"[ERROR] regenerate LLM call failed: {e}")
+
+        if allow_mock_fallback:
+            print("[MOCK] ALLOW_MOCK_FALLBACK=true → regenerate용 mock scenes 반환")
+            return _mock_regen_scenes()
+
         raise AppError("UPSTREAM_ERROR", f"LLM call failed: {str(e)}", status_code=502)
 
 def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:

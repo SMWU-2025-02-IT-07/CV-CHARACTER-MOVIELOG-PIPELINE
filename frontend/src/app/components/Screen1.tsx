@@ -1,19 +1,14 @@
 // src/app/components/Screen1.tsx
 
 import { Upload, Sparkles, X, ChevronRight } from "lucide-react";
-import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Label } from "@/app/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { StorageService } from "@/services/storage.service";
 import { AIService } from "@/services/ai.service";
 import { useState } from "react";
-
-interface Screen1Props {
-  onNext: () => void;
-}
-
-export function Screen1({ onNext }: Screen1Props) {
+import { useNavigate } from "react-router-dom";
+export function Screen1() {
+  const navigate = useNavigate();
   const { characterData, setCharacterData, setScenes, setScenarioId } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -64,7 +59,7 @@ export function Screen1({ onNext }: Screen1Props) {
       );
       setScenarioId(result.scenarioId);
       setScenes(result.scenes);
-      onNext();
+      navigate("/scenario");
     } catch (error) {
       setErrors({ ...errors, general: '시나리오 생성에 실패했습니다.' });
     } finally {

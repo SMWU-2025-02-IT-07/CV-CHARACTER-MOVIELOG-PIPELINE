@@ -4,13 +4,9 @@ import { Edit3, Play, RefreshCw, Check, X, Clock } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { AIService } from "@/services/ai.service";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-interface Screen2Props {
-  onEdit: () => void;
-  onNext: () => void;
-}
-
-export function Screen2({ onEdit, onNext }: Screen2Props) {
+import { useNavigate } from "react-router-dom";
+export function Screen2() {
+  const navigate = useNavigate();
   const { scenes, setScenes, characterData, scenarioId, setScenarioId } = useAppContext();
 
   const [editingSceneId, setEditingSceneId] = useState<number | null>(null);
@@ -154,7 +150,7 @@ export function Screen2({ onEdit, onNext }: Screen2Props) {
     }
 
     // 다음 단계로 이동(영상 생성 플로우)
-    onNext();
+    navigate("/render");
   };
 
   const isRegenAllDisabled = isRegenerating || !scenarioId;
@@ -581,7 +577,7 @@ export function Screen2({ onEdit, onNext }: Screen2Props) {
       {/* Bottom Actions */}
       <div className="fade-up fade-up-4" style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
         <button
-          onClick={onEdit}
+          onClick={() => navigate("/create")}
           disabled={isRegenerating}
           style={{
             flex: 1,

@@ -1,17 +1,15 @@
 // src/app/components/Screen3.tsx
 
-import { Loader2, Sparkles, Film, RefreshCw } from "lucide-react";
+import { Sparkles, Film, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { AIService } from "@/services/ai.service";
 import { Button } from "@/app/components/ui/button";
 import type { SceneUiStatus } from "@/types/job";
+import { useNavigate } from "react-router-dom";
 
-interface Screen3Props {
-  onComplete: () => void;
-}
-
-export function Screen3({ onComplete }: Screen3Props) {
+export function Screen3() {
+  const navigate = useNavigate();
   const { scenes, characterData, scenarioId, setScenes, setFinalVideoUrl } = useAppContext();
   const [sceneStatuses, setSceneStatuses] = useState<Record<number, SceneUiStatus>>({});
   const [regeneratingScene, setRegeneratingScene] = useState<number | null>(null);
@@ -76,7 +74,7 @@ export function Screen3({ onComplete }: Screen3Props) {
       if (sceneIdsToMerge.length === 0) { alert('?�성???�상???�습?�다.'); return; }
       const finalUrl = await AIService.mergeVideos(scenarioId, sceneIdsToMerge);
       setFinalVideoUrl(finalUrl);
-      onComplete();
+      navigate("/result");
     } catch (error) {
       alert('?�상 병합???�패?�습?�다.');
     }

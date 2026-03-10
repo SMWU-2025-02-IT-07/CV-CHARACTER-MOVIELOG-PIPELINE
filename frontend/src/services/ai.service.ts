@@ -42,6 +42,38 @@ export interface ScenarioResult {
   scenes: SceneOutput[];
 }
 
+export interface LibraryScenarioSummary {
+  scenario_id: string;
+  title: string;
+  created_at: string;
+  updated_at?: string;
+  status: string;
+  thumbnail_url?: string;
+  final_video_url?: string;
+}
+
+export interface LibrarySceneItem {
+  id: number;
+  title?: string;
+  description: string;
+  duration: number;
+  image_url?: string;
+  video_url?: string;
+  status?: string;
+}
+
+export interface LibraryScenarioDetail {
+  scenario_id: string;
+  title: string;
+  brief: string;
+  created_at: string;
+  updated_at?: string;
+  status: string;
+  thumbnail_url?: string;
+  final_video_url?: string;
+  scenes: LibrarySceneItem[];
+}
+
 /**
  * ===============================
  * API BASE URL 설정 (dev / prod 대응)
@@ -408,4 +440,22 @@ export const AIService = {
 
     return mergedUrl;
   },
+  
+  getScenarioList: async (): Promise<LibraryScenarioSummary[]> => {
+    const res = await fetch(`${API_V1_BASE_URL}/scenarios`);
+    if (!res.ok) {
+      throw new Error("시나리오 목록 조회에 실패했습니다.");
+    }
+    return res.json();
+  },
+
+  getScenarioDetail: async (scenarioId: string): Promise<LibraryScenarioDetail> => {
+    const res = await fetch(`${API_V1_BASE_URL}/scenarios/${scenarioId}`);
+    if (!res.ok) {
+      throw new Error("시나리오 상세 조회에 실패했습니다.");
+    }
+    return res.json();
+  },
+
+
 };

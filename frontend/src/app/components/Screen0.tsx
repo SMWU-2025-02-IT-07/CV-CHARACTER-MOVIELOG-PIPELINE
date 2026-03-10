@@ -180,10 +180,14 @@ function useInView(ref: RefObject<Element | null>, threshold = 0.15): boolean {
 
 /* ─── SUB-COMPONENTS ─────────────────────────────── */
 
-function HeroSection({ onStart }: { onStart: () => void }) {
-  const scrollY = useScrollY();
-  const heroOpacity = Math.max(0, 1 - scrollY / 400);
-  const heroY = scrollY * 0.35;
+function HeroSection({  onStart,  onOpenHistory,}: 
+  {
+    onStart: () => void;
+    onOpenHistory: () => void;
+  }) {  
+    const scrollY = useScrollY();
+    const heroOpacity = Math.max(0, 1 - scrollY / 400);
+    const heroY = scrollY * 0.35;
 
   return (
     <section style={{ position: "relative", height: "100vh", minHeight: 600, overflow: "hidden", display: "flex", alignItems: "center" }}>
@@ -211,12 +215,28 @@ function HeroSection({ onStart }: { onStart: () => void }) {
             이미지 한 장으로 시작하세요. AI가 시나리오를 구성하고 장면별 영상을 생성·병합해 완성된 단편을 바로 건네드립니다.
           </p>
 
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", animation: "fadeUp 0.7s 0.4s both" }}>
-            <button className="btn-primary" onClick={onStart} style={{ padding: "0 2rem", height: 52, fontSize: "0.95rem" }}>
-              지금 시작하기  →
+          <div
+            style={{
+              display: "flex",
+              gap: "0.75rem",
+              flexWrap: "wrap",
+              animation: "fadeUp 0.7s 0.4s both",
+            }}
+          >
+            <button
+              className="btn-primary"
+              onClick={onStart}
+              style={{ padding: "0 2rem", height: 52, fontSize: "0.95rem" }}
+            >
+              지금 시작하기 →
             </button>
-            <button className="btn-outline" style={{ padding: "0 1.75rem", height: 52, fontSize: "0.9rem" }}>
-              데모 영상 보기
+
+            <button
+              className="btn-outline"
+              onClick={onOpenHistory}
+              style={{ padding: "0 1.75rem", height: 52, fontSize: "0.9rem" }}
+            >
+              내 영상 보기
             </button>
           </div>
 
@@ -224,8 +244,8 @@ function HeroSection({ onStart }: { onStart: () => void }) {
           <div style={{ display: "flex", gap: "2rem", marginTop: "3rem", animation: "fadeUp 0.7s 0.5s both" }}>
             {[["10s", "생성 소요시간"], ["1080p", "출력 해상도"], ["3-Scene", "자동 구성"]].map(([val, label]) => (
               <div key={label}>
-                <div className="font-display" style={{ fontSize: "1.4rem", fontWeight: 800, color: "#c4b5fd" }}>{val}</div>
-                <div className="font-mono" style={{ fontSize: "0.62rem", color: "#44445a", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 3 }}>{label}</div>
+                <div className="font-display" style={{ fontSize: "1.4rem", fontWeight: 700, color: "#c4b5fd" }}>{val}</div>
+                <div className="font-mono" style={{ fontSize: "0.8rem", color: "#44445a", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 3 }}>{label}</div>
               </div>
             ))}
           </div>
@@ -436,8 +456,10 @@ function FAQSection() {
   );
 }
 
-function Footer({ onStart }: { onStart: () => void }) {
-  return (
+function Footer({  onStart,  onOpenHistory,}: {
+  onStart: () => void;
+  onOpenHistory: () => void;}) {  
+    return (
     <footer style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "3rem 2rem" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1.5rem" }}>
         <div>
@@ -455,6 +477,12 @@ function Footer({ onStart }: { onStart: () => void }) {
         <button className="btn-outline" onClick={onStart} style={{ padding: "0 1.25rem", height: 38, fontSize: "0.8rem" }}>
           시작하기  →
         </button>
+        <button
+          className="btn-outline"
+          onClick={onOpenHistory}
+          style={{ padding: "0 1.25rem", height: 38, fontSize: "0.8rem" }}>
+            내 영상 보기
+          </button>
       </div>
       <div style={{ maxWidth: 1100, margin: "1.5rem auto 0", borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "1.5rem" }}>
         <p className="font-mono" style={{ fontSize: "0.58rem", color: "#2a2a3a", letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -469,7 +497,7 @@ function Footer({ onStart }: { onStart: () => void }) {
 export default function Screen0() {
   const navigate = useNavigate();
   const onStart = () => navigate("/create");
-
+  const onOpenHistory = () => navigate("/history");
   return (
     <>
       <style>{GLOBAL_CSS}</style>
@@ -488,13 +516,13 @@ export default function Screen0() {
       </nav>
 
       <main>
-        <HeroSection onStart={onStart} />
+        <HeroSection onStart={onStart} onOpenHistory={onOpenHistory} />
         <MarqueeSection />
         <StepsSection />
         <SpecTable />
         <CTASection onStart={onStart} />
         <FAQSection />
-        <Footer onStart={onStart} />
+        <Footer onStart={onStart} onOpenHistory={onOpenHistory} />
       </main>
     </>
   );

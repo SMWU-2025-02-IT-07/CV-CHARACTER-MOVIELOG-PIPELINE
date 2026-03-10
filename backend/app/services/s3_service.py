@@ -54,7 +54,7 @@ def upload_image_to_s3(image_base64: str, scene_id: int, scenario_id: str) -> st
         s3_key = f"images/{timestamp}_{scenario_id}_scene_{scene_id}.png"
         
         # base64 디코딩
-        image_data = base64.b64decode(image_base64)
+        image_data = base64.Zb64decode(image_base64)
         
         s3_client.put_object(
             Bucket=settings.s3_bucket_name,

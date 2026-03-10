@@ -7,6 +7,8 @@ import { Screen3 } from "@/app/components/Screen3";
 import { Screen4 } from "@/app/components/Screen4";
 import AppShell from "@/app/layout/AppShell";
 import { useAppContext } from "@/context/AppContext";
+import { HistoryDetailScreen } from "../components/HistoryDetailScreen";
+import { HistoryScreen } from "../components/HistoryScreen";
 
 function ShellRoute({ children }: { children: ReactNode }) {
   return <AppShell>{children}</AppShell>;
@@ -80,6 +82,24 @@ export default function AppRouter() {
               <Screen4 />
             </ShellRoute>
           </RequireResult>
+        }
+      />
+
+      <Route
+        path="/history"
+        element={
+          <ShellRoute>
+            <HistoryScreen />
+          </ShellRoute>
+        }
+      />
+
+      <Route
+        path="/history/:scenarioId"
+        element={
+          <ShellRoute>
+            <HistoryDetailScreen />
+          </ShellRoute>
         }
       />
 

@@ -4,23 +4,35 @@ import { Sparkles, Film, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { AIService } from "@/services/ai.service";
+import { Button } from "@/app/components/ui/button";
+import type { SceneUiStatus } from "@/types/job";
 import { useNavigate } from "react-router-dom";
 
 export function Screen3() {
   const navigate = useNavigate();
   const { scenes, characterData, scenarioId, setScenes, setFinalVideoUrl } = useAppContext();
-  const [sceneStatuses, setSceneStatuses] = useState<{
-    [key: number]: 'pending' | 'generating' | 'completed' | 'error'
-  }>({});
+  const [sceneStatuses, setSceneStatuses] = useState<Record<number, SceneUiStatus>>({});
   const [regeneratingScene, setRegeneratingScene] = useState<number | null>(null);
-  const [allCompleted, setAllCompleted] = useState(false);
 
   useEffect(() => {
-    const initialStatuses: { [key: number]: 'pending' | 'generating' | 'completed' | 'error' } = {};
+    const initialStatuses: Record<number, SceneUiStatus> = {};
     scenes.forEach(scene => { initialStatuses[scene.id] = 'pending'; });
     setSceneStatuses(initialStatuses);
     generateAllScenes();
   }, []);
+
+  const renderSceneVideo = async (sceneId: number): Promise<string> => {
+    return AIService.generateSceneVideo(
+      scenarioId,
+      sceneId,
+      characterData.imageUrl,
+      {
+        onStatusChange: (status) => {
+          setSceneStatuses(prev => ({ ...prev, [sceneId]: status }));
+        },
+      }
+    );
+  };
 
   const generateAllScenes = async () => {
     const updatedScenes = [...scenes];
@@ -28,15 +40,14 @@ export function Screen3() {
       const scene = scenes[i];
       setSceneStatuses(prev => ({ ...prev, [scene.id]: 'generating' }));
       try {
-        const videoUrl = await AIService.generateSceneVideo(scenarioId, scene.id, characterData.imageUrl);
+        const videoUrl = await renderSceneVideo(scene.id);
         updatedScenes[i] = { ...updatedScenes[i], videoUrl };
         setScenes(updatedScenes);
         setSceneStatuses(prev => ({ ...prev, [scene.id]: 'completed' }));
       } catch (error) {
         setSceneStatuses(prev => ({ ...prev, [scene.id]: 'error' }));
       }
-    }
-    setAllCompleted(true);
+    };
   };
 
   const regenerateScene = async (sceneId: number) => {
@@ -45,7 +56,7 @@ export function Screen3() {
     const sceneIndex = scenes.findIndex(s => s.id === sceneId);
     if (sceneIndex === -1) return;
     try {
-      const videoUrl = await AIService.generateSceneVideo(scenarioId, sceneId, characterData.imageUrl);
+      const videoUrl = await renderSceneVideo(sceneId);
       const updatedScenes = [...scenes];
       updatedScenes[sceneIndex] = { ...updatedScenes[sceneIndex], videoUrl };
       setScenes(updatedScenes);
@@ -59,13 +70,13 @@ export function Screen3() {
 
   const handleMergeAndComplete = async () => {
     try {
-      const videoUrls = scenes.map(scene => scene.videoUrl).filter((url): url is string => !!url);
-      if (videoUrls.length === 0) { alert('생성된 영상이 없습니다.'); return; }
-      const finalUrl = await AIService.mergeVideos(videoUrls);
+      const sceneIdsToMerge = scenes.filter(scene => !!scene.videoUrl).map(scene => scene.id);
+      if (sceneIdsToMerge.length === 0) { alert('?�성???�상???�습?�다.'); return; }
+      const finalUrl = await AIService.mergeVideos(scenarioId, sceneIdsToMerge);
       setFinalVideoUrl(finalUrl);
       navigate("/result");
     } catch (error) {
-      alert('영상 병합에 실패했습니다.');
+      alert('?�상 병합???�패?�습?�다.');
     }
   };
 
@@ -81,6 +92,7 @@ export function Screen3() {
   const completedCount = Object.values(sceneStatuses).filter(s => s === 'completed').length;
   const totalCount = scenes.length;
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+  const allCompleted = scenes.length > 0 && scenes.every(scene => sceneStatuses[scene.id] === 'completed');
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-6 relative z-10">
@@ -89,10 +101,10 @@ export function Screen3() {
       <div className="fade-up fade-up-1" style={{ marginBottom: '1.75rem' }}>
         <div className="eyebrow" style={{ marginBottom: '0.75rem' }}>Scene Rendering</div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>
-          씬별<span className="gradient-brand-text">영상 생성</span> 중
+          ?�별<span className="gradient-brand-text">?�상 ?�성</span> �?
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-          각 씬의 영상을 확인하고 마음에 들지 않으면 재생성할 수 있습니다
+          �??�의 ?�상???�인?�고 마음???��? ?�으�??�생?�할 ???�습?�다
         </p>
       </div>
 
@@ -237,7 +249,7 @@ export function Screen3() {
                   </p>
                   <div style={{ marginTop: '12px', display: 'flex', gap: '12px' }}>
                     {[
-                      { label: 'DURATION', value: scene.duration + '초' },
+                      { label: 'DURATION', value: scene.duration + 's' },
                       { label: 'SCENE', value: `#${scene.id}` },
                     ].map(item => (
                       <div key={item.label}>
@@ -268,7 +280,7 @@ export function Screen3() {
             }}
           >
             <Sparkles size={18} />
-            영상 병합 및 완료
+            ?�상 병합 �??�료
           </button>
         </div>
       ) : (
@@ -284,7 +296,7 @@ export function Screen3() {
           }} />
           <div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              영상을 생성하고 있습니다. 잠시만 기다려주세요...
+              ?�상???�성?�고 ?�습?�다. ?�시�?기다?�주?�요...
             </p>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
               {completedCount}/{totalCount} SCENES COMPLETE

@@ -1,4 +1,11 @@
 ﻿/// <reference types="vite/client" />
+import type {
+  CreateJobRequest,
+  CreateJobResponse,
+  GetJobResponse,
+  JobStatus,
+  SceneUiStatus,
+} from '../types/job';
 
 export interface SceneInput {
   id: number;
@@ -140,6 +147,143 @@ function mapApiScene(scene: ApiScene): SceneOutput {
 
 /**
  * ===============================
+ * Job 유틸
+ * ===============================
+ */
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function mapJobStatusToSceneStatus(status: JobStatus): SceneUiStatus {
+  switch (status) {
+    case 'queued':
+      return 'pending';
+    case 'running':
+      return 'generating';
+    case 'succeeded':
+      return 'completed';
+    case 'failed':
+    case 'canceled':
+      return 'error';
+    default:
+      return 'error';
+  }
+}
+
+//Job 생성
+export async function createRenderSceneJob(
+  scenarioId: string,
+  sceneId: number
+): Promise<CreateJobResponse> {
+  const body: CreateJobRequest = {
+    type: 'render_scene',
+    payload: {
+      scenario_id: scenarioId,
+      scene_ids: [sceneId],
+      options: {},
+    },
+  };
+
+  const response = await fetch(`${API_V1_BASE_URL}/jobs`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to create render_scene job: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+export async function createMergeJob(
+  scenarioId: string,
+  sceneIds: number[]
+): Promise<CreateJobResponse> {
+  if (sceneIds.length === 0) {
+    throw new Error('sceneIds is empty');
+  }
+
+  const body: CreateJobRequest = {
+    type: 'merge',
+    payload: {
+      scenario_id: scenarioId,
+      scene_ids: sceneIds,
+      options: {},
+    },
+  };
+
+  const response = await fetch(`${API_V1_BASE_URL}/jobs`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to create merge job: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+//Job 조회
+export async function getJob(jobId: string): Promise<GetJobResponse> {
+  const response = await fetch(`${API_V1_BASE_URL}/jobs/${jobId}`, {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to get job: ${response.status} ${text}`);
+  }
+
+  return response.json();
+}
+
+//Polling
+export async function pollJobUntilDone(
+  jobId: string,
+  options?: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    onStatusChange?: (job: GetJobResponse) => void;
+  }
+): Promise<GetJobResponse> {
+  const intervalMs = options?.intervalMs ?? 2000;
+  const timeoutMs = options?.timeoutMs ?? 1000 * 60 * 5; // 5분
+
+  const start = Date.now();
+
+  while (true) {
+    const job = await getJob(jobId);
+    options?.onStatusChange?.(job);
+
+    if (
+      job.status === 'succeeded' ||
+      job.status === 'failed' ||
+      job.status === 'canceled'
+    ) {
+      return job;
+    }
+
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('Job polling timed out.');
+    }
+
+    await sleep(intervalMs);
+  }
+}
+
+/**
+ * ===============================
  * AI Service
  * ===============================
  */
@@ -224,53 +368,77 @@ export const AIService = {
   generateSceneVideo: async (
     scenarioId: string,
     sceneId: number,
-    imageUrl: string,
-    frameCount: number = 113,
-    seed: number = 10
+    _imageUrl?: string,
+    options?: {
+      onStatusChange?: (status: SceneUiStatus) => void;
+    }
   ): Promise<string> => {
-    // 이미지를 blob으로 가져오기
-    const imageResponse = await fetch(imageUrl);
-    const imageBlob = await imageResponse.blob();
-    
-    // FormData 생성
-    const formData = new FormData();
-    formData.append('image', imageBlob, 'scene_image.jpg');
-    formData.append('frame_count', frameCount.toString());
-    formData.append('seed', seed.toString());
-    
-    // 백엔드 API를 통해 ComfyUI에 비디오 생성 요청
-    const response = await fetch(`${API_V1_BASE_URL}/comfyui/generate/${scenarioId}/${sceneId}`, {
-      method: 'POST',
-      body: formData,
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Video generation failed: ${response.statusText}`);
-    }
-    
-    const result = await response.json();
-    const promptId = result.prompt_id;
-    
-    // 상태 폴링으로 완료 대기
-    while (true) {
-      await new Promise(resolve => setTimeout(resolve, 10000)); // 10초 대기
-      
-      const statusResponse = await fetch(`${API_V1_BASE_URL}/comfyui/status/${scenarioId}/${sceneId}/${promptId}`);
-      const statusResult = await statusResponse.json();
-      
-      if (statusResult.status === 'completed') {
-        return statusResult.video_url; // S3 URL 반환
-      }
-      
-      if (statusResult.status === 'failed') {
-        throw new Error('Video generation failed');
-      }
-    }
+  // 1) job 생성
+  const createdJob = await createRenderSceneJob(scenarioId, sceneId);
+  options?.onStatusChange?.(mapJobStatusToSceneStatus(createdJob.status));
+
+  // 2) polling
+  const completedJob = await pollJobUntilDone(createdJob.job_id, {
+    intervalMs: 2000,
+    timeoutMs: 1000 * 60 * 5,
+    onStatusChange: (job) => {
+      options?.onStatusChange?.(mapJobStatusToSceneStatus(job.status));
+    },
+  });
+
+  // 3) 최종 상태 확인
+  if (completedJob.status === 'failed') {
+    throw new Error(completedJob.error?.message ?? 'Scene render job failed.');
+  }
+
+  if (completedJob.status === 'canceled') {
+    throw new Error('Scene render job was canceled.');
+  }
+
+  if (completedJob.status !== 'succeeded') {
+    throw new Error(`Unexpected job status: ${completedJob.status}`);
+  }
+
+  // 4) result.scenes[] 에서 해당 scene 찾기
+  const resultScenes = (completedJob.result as { scenes?: Array<{ id: number; video_url?: string }> } | undefined)?.scenes;
+  const matchedScene = resultScenes?.find((scene) => scene.id === sceneId);
+
+  if (!matchedScene) {
+    throw new Error(`No scene result found for scene_id=${sceneId}`);
+  }
+
+  if (!matchedScene.video_url) {
+    throw new Error(`Scene result has no video_url for scene_id=${sceneId}`);
+  }
+
+    return matchedScene.video_url;
   },
 
-  mergeVideos: async (videoUrls: string[]): Promise<string> => {
-    // 임시로 첫 번째 비디오 URL 반환 (실제 병합 로직은 추후 구현)
-    return videoUrls[0] || '';
+  mergeVideos: async (scenarioId: string, sceneIds: number[]): Promise<string> => {
+    const createdJob = await createMergeJob(scenarioId, sceneIds);
+    const completedJob = await pollJobUntilDone(createdJob.job_id, {
+      intervalMs: 2000,
+      timeoutMs: 1000 * 60 * 5,
+    });
+
+    if (completedJob.status === 'failed') {
+      throw new Error(completedJob.error?.message ?? 'Merge job failed.');
+    }
+
+    if (completedJob.status === 'canceled') {
+      throw new Error('Merge job was canceled.');
+    }
+
+    if (completedJob.status !== 'succeeded') {
+      throw new Error(`Unexpected merge job status: ${completedJob.status}`);
+    }
+
+    const mergedUrl = (completedJob.result as { merged_url?: string } | undefined)?.merged_url;
+    if (!mergedUrl) {
+      throw new Error('Merge job succeeded but merged_url is missing.');
+    }
+
+    return mergedUrl;
   },
   
   getScenarioList: async (): Promise<LibraryScenarioSummary[]> => {

@@ -45,7 +45,7 @@ def _resize_image_if_needed(image_base64: str, max_size_mb: float = 4.5) -> str:
             resized_image.save(buffer, format='JPEG', quality=quality, optimize=True)
             
             # 결과 크기 확인
-            result_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            result_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
             result_size_mb = len(result_base64) * 3 / 4 / (1024 * 1024)
             
             if result_size_mb <= max_size_mb or quality <= 30:
@@ -65,9 +65,72 @@ def _resize_image_if_needed(image_base64: str, max_size_mb: float = 4.5) -> str:
                 image = image.convert('RGB')
             buffer = io.BytesIO()
             image.save(buffer, format='JPEG', quality=50)
-            return base64.b64encode(buffer.getvalue()).decode('utf-8')
+            return base64.b64encode(buffer.getvalue()).decode("utf-8")
         except:
             return image_base64
+
+
+def _safe_text(value: str | None, default: str) -> str:
+    if value is None:
+        return default
+    value = str(value).strip()
+    return value if value else default
+
+
+def _mock_character_and_scenes(req: CreateScenarioRequest) -> dict:
+    """
+    로컬 개발용 mock 응답
+    반환 형식은 Bedrock 실제 응답과 동일하게 유지
+    """
+    name = _safe_text(getattr(req.character, "name", None), "캐릭터")
+    where = _safe_text(getattr(req.brief, "where", None), "풀밭")
+    what = _safe_text(getattr(req.brief, "what", None), "뛰어논다")
+    how = _safe_text(getattr(req.brief, "how", None), "밝고 경쾌하게")
+
+    character_description = (
+        f"A cute 3D animated character named {name}, small and lively, "
+        f"expressive eyes, soft fur texture, rounded face, charming and playful presence"
+    )
+
+    scene_templates = [
+        {
+            "scene_number": 1,
+            "scenario_ko": f"{name}가 {where}에 서서 주변을 두리번거리며 호기심 가득한 표정을 짓는다. 햇살이 부드럽게 비추고, 곧 즐겁게 움직일 듯한 분위기가 감돈다.",
+            "video_prompt_en": (
+                f"{character_description} looks around curiously in {where}, "
+                f"shifting weight lightly and raising its head with bright eyes, "
+                f"soft sunlight, gentle breeze, cinematic opening shot, warm and lively 3D animation style"
+            ),
+        },
+        {
+            "scene_number": 2,
+            "scenario_ko": f"{name}가 {where}을 빠르게 가로지르며 {what} 장난스럽게 움직인다. 몸짓과 표정에서 신나는 감정이 자연스럽게 드러난다.",
+            "video_prompt_en": (
+                f"{character_description} runs energetically across {where}, "
+                f"playfully reacting while {what}, dynamic body motion, lively facial expression, "
+                f"tracking camera, vibrant outdoor lighting, animated cinematic feel"
+            ),
+        },
+        {
+            "scene_number": 3,
+            "scenario_ko": f"{name}가 {where} 한가운데에서 {how} 움직이며 즐겁게 논다. 마지막에는 만족스러운 표정으로 장면이 마무리된다.",
+            "video_prompt_en": (
+                f"{character_description} keeps moving happily in the middle of {where}, "
+                f"expressing joy through posture, gesture, and facial expression, "
+                f"slowing into a satisfying final beat, soft cinematic camera, polished 3D animation mood"
+            ),
+        },
+    ]
+
+    result = {
+        "character_description": character_description,
+        "scenes": scene_templates,
+    }
+
+    # mock도 동일 스키마 검증
+    ScenesLLM.model_validate(result)
+    return result
+
 
 def extract_character_description_and_scenes(image_base64: str, req: CreateScenarioRequest) -> dict:
     """
@@ -80,6 +143,13 @@ def extract_character_description_and_scenes(image_base64: str, req: CreateScena
     Returns:
         {"character_description": "...", "scenes": [...]} 형태의 데이터
     """
+    use_mock_llm = getattr(settings, "use_mock_llm", False)
+    allow_mock_fallback = getattr(settings, "allow_mock_fallback", False)
+
+    if use_mock_llm:
+        print("[MOCK] USE_MOCK_LLM=true → Bedrock 호출 없이 mock 시나리오 반환")
+        return _mock_character_and_scenes(req)
+
     try:
         # 이미지 크기 체크 및 리사이즈
         resized_image = _resize_image_if_needed(image_base64)
@@ -165,4 +235,10 @@ Output strict JSON only, no markdown, no explanation:
         return parsed
         
     except Exception as e:
+        print(f"[ERROR] Bedrock Sonnet call failed: {e}")
+
+        if allow_mock_fallback:
+            print("[MOCK] ALLOW_MOCK_FALLBACK=true → mock 시나리오로 대체")
+            return _mock_character_and_scenes(req)
+
         raise AppError("UPSTREAM_ERROR", f"Sonnet call failed: {str(e)}", status_code=502)

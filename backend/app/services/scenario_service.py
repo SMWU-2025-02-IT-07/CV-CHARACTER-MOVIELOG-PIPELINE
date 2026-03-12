@@ -16,7 +16,7 @@ from app.schemas.scenario import (
     SceneOut,
 )
 from app.services.character_analyzer import extract_character_description_and_scenes
-from app.services.s3_service import upload_scenario_to_s3
+from app.services.s3_service import upload_scenario_to_s3, upload_character_image_to_s3
 
 
 def _ensure_dir() -> Path:
@@ -207,6 +207,9 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
     
     # 시나리오 ID 미리 생성
     scenario_id = str(uuid4())
+    
+    # 캐릭터 이미지 S3 업로드
+    character_s3_url = upload_character_image_to_s3(image_data, scenario_id)
 
     # 씬 데이터 처리 - 연속성을 위한 메타데이터 추가
     scenes_out: list[SceneOut] = []

@@ -2,12 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.errors import register_exception_handlers
 from app.routers.health import router as health_router
 from app.routers.scenarios import router as scenarios_router
 from app.routers.characters import router as characters_router
 from app.routers.comfyui import router as comfyui_router
+<<<<<<< main
+from app.routers.jobs import router as jobs_router
+from app.routers.scenes import router as scenes_router
+=======
 from app.routers import jobs
+>>>>>>> main
 from app.core.errors import register_exception_handlers
 
 app = FastAPI(title="CV Character Movielog Backend", version="0.1.0")
@@ -30,6 +34,11 @@ app.include_router(health_router, prefix="/api/v1")
 app.include_router(scenarios_router, prefix="/api/v1")
 app.include_router(characters_router, prefix="/api/v1")
 app.include_router(comfyui_router, prefix="/api/v1")
+<<<<<<< main
+app.include_router(jobs_router, prefix="/api/v1")
+app.include_router(scenes_router, prefix="/api/v1")
+=======
 app.include_router(jobs.router, prefix="/api/v1")
+>>>>>>> main
 
 register_exception_handlers(app)

@@ -7,7 +7,7 @@ import subprocess
 
 from app.core.config import settings
 from app.services.scenario_service import get_scene_for_generation, update_scene_result
-from app.services.s3_service import upload_video_to_s3
+from app.services.s3_service import upload_scene_video_to_s3
 
 router = APIRouter(prefix="/comfyui", tags=["comfyui"])
 

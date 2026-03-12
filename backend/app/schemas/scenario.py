@@ -53,6 +53,7 @@ class SceneLLM(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scene_number: int
     scenario_ko: str
+    image_prompt_en: str
     video_prompt_en: str
 
 class ScenesLLM(BaseModel):

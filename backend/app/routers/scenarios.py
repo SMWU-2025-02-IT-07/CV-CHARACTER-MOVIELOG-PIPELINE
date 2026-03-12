@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 import traceback
 
 from app.schemas.scenario import (
@@ -71,3 +71,100 @@ def list_all(
 @router.post("/{scenario_id}/regenerate", response_model=RegenerateScenarioResponse)
 def regenerate(scenario_id: str, req: RegenerateScenarioRequest):
     return regenerate_scenario(scenario_id, req)
+
+@router.post("/{scenario_id}/scenes/{scene_id}/preview")
+def generate_scene_preview(scenario_id: str, scene_id: int):
+    """씬 미리보기 이미지 생성 요청"""
+    try:
+        import requests
+        import os
+        import boto3
+        import tempfile
+        from pathlib import Path
+        
+        print(f"Preview generation request: scenario={scenario_id}, scene={scene_id}")
+        
+        # 시나리오 정보 가져오기
+        scenario = get_scenario(scenario_id)
+        scene = next((s for s in scenario.scenes if s.id == scene_id), None)
+        
+        if not scene:
+            raise HTTPException(status_code=404, detail="Scene not found")
+        
+        print(f"Scene found: {scene.description}")
+        print(f"Image prompt: {scene.image_prompt}")
+        
+        # ml-server에 이미지 생성 요청
+        ml_server_url = os.getenv('ML_SERVER_URL', 'http://16.184.61.191:8000')
+        
+        # S3에서 캐릭터 이미지 다운로드
+        try:
+            s3 = boto3.client('s3')
+            bucket = os.getenv('S3_BUCKET_NAME', 'cv-character-movielog-pipeline')
+            character_s3_key = f"characters/{scenario_id}/input.png"
+            
+            # 임시 파일로 다운로드
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                s3.download_file(bucket, character_s3_key, tmp_file.name)
+                
+                # ml-server에 FormData로 전송
+                with open(tmp_file.name, 'rb') as img_file:
+                    files = {'image': ('character.png', img_file, 'image/png')}
+                    data = {
+                        'prompt': scene.image_prompt or scene.description,
+                        'seed': 42
+                    }
+                    
+                    print(f"Sending request to ml-server: {ml_server_url}/generate-image/{scenario_id}/{scene_id}")
+                    response = requests.post(
+                        f"{ml_server_url}/generate-image/{scenario_id}/{scene_id}",
+                        files=files,
+                        data=data,
+                        timeout=30
+                    )
+                
+                # 임시 파일 삭제
+                Path(tmp_file.name).unlink(missing_ok=True)
+                
+        except Exception as e:
+            print(f"Failed to download character image: {e}")
+            raise HTTPException(status_code=500, detail=f"Character image not found: {str(e)}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"Preview generation started: {result}")
+            return result
+        else:
+            print(f"ml-server error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=500, detail="Preview generation failed")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating preview: {e}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{scenario_id}/scenes/{scene_id}/preview/{prompt_id}")
+def get_preview_status(scenario_id: str, scene_id: int, prompt_id: str):
+    """미리보기 이미지 생성 상태 확인"""
+    try:
+        import requests
+        import os
+        
+        ml_server_url = os.getenv('ML_SERVER_URL', 'http://16.184.61.191:8000')
+        
+        response = requests.get(
+            f"{ml_server_url}/image-status/{scenario_id}/{scene_id}/{prompt_id}",
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise HTTPException(status_code=500, detail="Status check failed")
+            
+    except Exception as e:
+        print(f"Error checking preview status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

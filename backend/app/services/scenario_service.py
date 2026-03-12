@@ -89,7 +89,7 @@ Field rules (MUST follow):
   ❌ "looks curious" → ✅ "tilts head slowly to one side, eyes wide, leaning slightly forward"
   
   CHARACTER CONSISTENCY:
-  - Use short character identifier in every video_prompt: "a small blue star-shaped plush character with a white face and yellow S emblem"
+  - Use short character identifier in every video_prompt.
   - Character appearance must be identical in every scene.
   
   SCENE CONTINUITY:
@@ -225,7 +225,7 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
             title=f"씬 {s['scene_number']}",
             description=s["scenario_ko"],
             duration=4,
-            image_prompt="",  # ComfyUI에서는 video_prompt만 사용
+            image_prompt=s.get("image_prompt_en", s["scenario_ko"]),  # 이미지 프롬프트 활용
             video_prompt=s["video_prompt_en"],
             image_url=None,  # 생성 후 업데이트됨
         )
@@ -272,32 +272,51 @@ def get_scene_for_generation(scenario_id: str, scene_id: int) -> dict:
         "duration": scene.duration
     }
 
-def update_scene_result(scenario_id: str, scene_id: int, video_url: str, last_frame_filename: str) -> None:
+def update_scene_result(scenario_id: str, scene_id: int, video_url: str, last_frame_filename: str = "") -> None:
     """씬 생성 완료 후 결과 업데이트"""
     p = _scenario_path(scenario_id)
     if not p.exists():
+        print(f"Scenario file not found: {p}")
         raise AppError("NOT_FOUND", f"Scenario not found: {scenario_id}", status_code=404)
     
     try:
+        print(f"Reading scenario file: {p}")
         payload = json.loads(p.read_text(encoding="utf-8"))
+        print(f"Loaded scenario with {len(payload.get('scenes', []))} scenes")
         
         # 해당 씬 찾아서 업데이트
+        scene_found = False
         for scene in payload["scenes"]:
             if scene["id"] == scene_id:
+                print(f"Updating scene {scene_id} with video URL: {video_url}")
                 scene["image_url"] = video_url
-                scene["last_frame_filename"] = last_frame_filename
+                if last_frame_filename:
+                    scene["last_frame_filename"] = last_frame_filename
+                scene_found = True
                 break
         
+        if not scene_found:
+            print(f"Scene {scene_id} not found in scenario {scenario_id}")
+            raise AppError("NOT_FOUND", f"Scene {scene_id} not found", status_code=404)
+        
         # 파일 저장
+        print(f"Saving updated scenario to: {p}")
         p.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8"
         )
         
         # S3 업데이트
+        print(f"Uploading scenario to S3")
         upload_scenario_to_s3(scenario_id, payload)
+        print(f"Scene {scene_id} update completed successfully")
         
+    except AppError:
+        raise
     except Exception as e:
+        print(f"Error updating scene result: {e}")
+        import traceback
+        print(traceback.format_exc())
         raise AppError("STORAGE_ERROR", f"Failed to update scene result: {str(e)}", status_code=500)
 
 def get_scenario(scenario_id: str) -> CreateScenarioResponse:

@@ -1,6 +1,6 @@
 ﻿// src/app/components/Screen2.tsx
 
-import { Edit3, Play, RefreshCw, Check, X, Clock } from "lucide-react";
+import { Edit3, Play, RefreshCw, Check, X, Clock, Image } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { AIService } from "@/services/ai.service";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +12,7 @@ export function Screen2() {
   const [editingSceneId, setEditingSceneId] = useState<number | null>(null);
   const [editedDescription, setEditedDescription] = useState("");
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [generatingPreviewId, setGeneratingPreviewId] = useState<number | null>(null);
 
   // ✅ "마지막으로 서버에서 받은 scenes"를 기준(baseline)으로 저장
   // - 변경사항(dirty) 여부 판단
@@ -64,6 +65,40 @@ export function Screen2() {
   const handleCancelEdit = () => {
     setEditingSceneId(null);
     setEditedDescription("");
+  };
+
+  /**
+   * ✅ 씬 미리보기 이미지 생성
+   */
+  const handleGeneratePreview = async (sceneId: number) => {
+    if (!scenarioId) return;
+    
+    setGeneratingPreviewId(sceneId);
+    try {
+      const previewUrl = await AIService.generateScenePreview(
+        scenarioId,
+        sceneId,
+        characterData.imageUrl,
+        {
+          onStatusChange: (status) => {
+            console.log(`Preview ${sceneId} status:`, status);
+          }
+        }
+      );
+      
+      // 생성된 미리보기 이미지 URL을 씬에 저장
+      setScenes(scenes.map(scene => 
+        scene.id === sceneId 
+          ? { ...scene, imageUrl: previewUrl }
+          : scene
+      ));
+      
+    } catch (error) {
+      console.error('Preview generation error:', error);
+      alert('미리보기 이미지 생성에 실패했습니다.');
+    } finally {
+      setGeneratingPreviewId(null);
+    }
   };
 
   /**
@@ -297,28 +332,55 @@ export function Screen2() {
                 </div>
 
                 {editingSceneId !== scene.id && (
-                  <button
-                    onClick={() => handleEditScene(scene.id, scene.description)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      padding: "5px 10px",
-                      borderRadius: "calc(var(--radius) - 4px)",
-                      background: "transparent",
-                      border: "1px solid var(--glass-border)",
-                      color: "var(--text-muted)",
-                      fontSize: "0.7rem",
-                      cursor: "pointer",
-                      fontFamily: "var(--font-mono)",
-                      letterSpacing: "0.05em",
-                      textTransform: "uppercase",
-                      transition: "border-color 0.2s, color 0.2s",
-                    }}
-                  >
-                    <Edit3 size={11} />
-                    EDIT
-                  </button>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      onClick={() => handleGeneratePreview(scene.id)}
+                      disabled={generatingPreviewId === scene.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        padding: "5px 10px",
+                        borderRadius: "calc(var(--radius) - 4px)",
+                        background: "transparent",
+                        border: "1px solid var(--glass-border)",
+                        color: "var(--text-muted)",
+                        fontSize: "0.7rem",
+                        cursor: generatingPreviewId === scene.id ? "wait" : "pointer",
+                        fontFamily: "var(--font-mono)",
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
+                        transition: "border-color 0.2s, color 0.2s",
+                        opacity: generatingPreviewId === scene.id ? 0.7 : 1,
+                      }}
+                      title="씬 미리보기 이미지 생성"
+                    >
+                      <Image size={11} />
+                      {generatingPreviewId === scene.id ? "GENERATING" : "PREVIEW"}
+                    </button>
+                    <button
+                      onClick={() => handleEditScene(scene.id, scene.description)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        padding: "5px 10px",
+                        borderRadius: "calc(var(--radius) - 4px)",
+                        background: "transparent",
+                        border: "1px solid var(--glass-border)",
+                        color: "var(--text-muted)",
+                        fontSize: "0.7rem",
+                        cursor: "pointer",
+                        fontFamily: "var(--font-mono)",
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
+                        transition: "border-color 0.2s, color 0.2s",
+                      }}
+                    >
+                      <Edit3 size={11} />
+                      EDIT
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -402,18 +464,37 @@ export function Screen2() {
                         gap: "8px",
                       }}
                     >
-                      <Play size={20} style={{ color: "var(--text-muted)" }} />
-                      <span
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "0.65rem",
-                          color: "var(--text-muted)",
-                          letterSpacing: "0.1em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Pending
-                      </span>
+                      {generatingPreviewId === scene.id ? (
+                        <>
+                          <RefreshCw size={20} style={{ color: "var(--text-muted)", animation: "spin 1s linear infinite" }} />
+                          <span
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: "0.65rem",
+                              color: "var(--text-muted)",
+                              letterSpacing: "0.1em",
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            Generating...
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Play size={20} style={{ color: "var(--text-muted)" }} />
+                          <span
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: "0.65rem",
+                              color: "var(--text-muted)",
+                              letterSpacing: "0.1em",
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            Pending
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

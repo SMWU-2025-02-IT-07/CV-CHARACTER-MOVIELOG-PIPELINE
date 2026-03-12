@@ -95,29 +95,32 @@ def _mock_character_and_scenes(req: CreateScenarioRequest) -> dict:
     scene_templates = [
         {
             "scene_number": 1,
-            "scenario_ko": f"{name}가 {where}에 서서 주변을 두리번거리며 호기심 가득한 표정을 짓는다. 햇살이 부드럽게 비추고, 곧 즐겁게 움직일 듯한 분위기가 감돈다.",
+            "scenario_ko": f"{name}가 {where}에 서서 주변을 천천히 둘러보며 호기심 가득한 표정을 짓는다. 햇살이 부드럽게 비추고, 평화로운 분위기가 감돈다.",
+            "image_prompt_en": f"A cute character standing in {where}, curious expression, soft sunlight, peaceful atmosphere, 3D animation style, warm lighting",
             "video_prompt_en": (
-                f"{character_description} looks around curiously in {where}, "
-                f"shifting weight lightly and raising its head with bright eyes, "
-                f"soft sunlight, gentle breeze, cinematic opening shot, warm and lively 3D animation style"
+                f"{character_description} stands gently in {where}, "
+                f"slowly turning head to look around with bright curious eyes, "
+                f"soft sunlight filtering through, gentle breeze, calm opening shot, peaceful 3D animation style"
             ),
         },
         {
             "scene_number": 2,
-            "scenario_ko": f"{name}가 {where}을 빠르게 가로지르며 {what} 장난스럽게 움직인다. 몸짓과 표정에서 신나는 감정이 자연스럽게 드러난다.",
+            "scenario_ko": f"{name}가 {where}을 천천히 걸어다니며 {what} 부드럽게 움직인다. 몸짓과 표정에서 즐거운 감정이 자연스럽게 드러난다.",
+            "image_prompt_en": f"A cute character walking slowly in {where}, gentle movement, happy expression, soft outdoor lighting, 3D animation",
             "video_prompt_en": (
-                f"{character_description} runs energetically across {where}, "
-                f"playfully reacting while {what}, dynamic body motion, lively facial expression, "
-                f"tracking camera, vibrant outdoor lighting, animated cinematic feel"
+                f"{character_description} walks slowly across {where}, "
+                f"gently moving while {what}, soft body motion, calm facial expression, "
+                f"smooth camera tracking, warm outdoor lighting, serene animated feel"
             ),
         },
         {
             "scene_number": 3,
-            "scenario_ko": f"{name}가 {where} 한가운데에서 {how} 움직이며 즐겁게 논다. 마지막에는 만족스러운 표정으로 장면이 마무리된다.",
+            "scenario_ko": f"{name}가 {where} 한가운데에서 {how} 조용히 움직이며 평화롭게 논다. 마지막에는 만족스러운 표정으로 장면이 마무리된다.",
+            "image_prompt_en": f"A cute character in the center of {where}, peaceful play, satisfied expression, golden hour lighting, 3D animation",
             "video_prompt_en": (
-                f"{character_description} keeps moving happily in the middle of {where}, "
-                f"expressing joy through posture, gesture, and facial expression, "
-                f"slowing into a satisfying final beat, soft cinematic camera, polished 3D animation mood"
+                f"{character_description} moves calmly in the center of {where}, "
+                f"expressing contentment through gentle posture and peaceful facial expression, "
+                f"settling into a satisfying final moment, soft cinematic camera, tranquil 3D animation mood"
             ),
         },
     ]
@@ -192,8 +195,11 @@ Rules:
 - Scenes must flow naturally as a continuous story
 - CHARACTER DESCRIPTION must be repeated verbatim at the start of every video_prompt_en
 - Express emotion through posture, gesture, facial expression — never abstract labels
-- video_prompt_en must start with a motion verb
+- video_prompt_en must start with a motion verb and be CALM and GENTLE, avoid dynamic or energetic actions
 - Write video_prompt_en as a single flowing paragraph, present tense
+- Focus on subtle, peaceful movements rather than fast or dramatic actions
+- Use words like "gently", "slowly", "softly", "calmly" in video prompts
+- Avoid words like "energetically", "quickly", "dynamically", "vibrantly"
 
 Output strict JSON only, no markdown, no explanation:
 {
@@ -202,16 +208,19 @@ Output strict JSON only, no markdown, no explanation:
     {
       "scene_number": 1,
       "scenario_ko": "한국어 시나리오 2-3문장. 생동감 있게.",
-      "video_prompt_en": "{character_description} + action, camera movement, environment, lighting, mood/style."
+      "image_prompt_en": "English image generation prompt for this scene, describing composition, lighting, and visual elements.",
+      "video_prompt_en": "{character_description} + gentle action, slow camera movement, peaceful environment, soft lighting, calm mood/style."
     },
     {
       "scene_number": 2,
       "scenario_ko": "...",
+      "image_prompt_en": "...",
       "video_prompt_en": "..."
     },
     {
       "scene_number": 3,
       "scenario_ko": "...",
+      "image_prompt_en": "...",
       "video_prompt_en": "..."
     }
   ]

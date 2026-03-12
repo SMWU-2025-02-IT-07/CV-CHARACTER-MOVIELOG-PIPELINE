@@ -83,12 +83,15 @@ export interface LibraryScenarioDetail {
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_AWS_API_ENDPOINT ||
-  "http://52.78.181.92:8000"
+  "http://43.202.58.164:8000"
 ).replace(/\/$/, "");
 
 const API_V1_BASE_URL = API_BASE_URL.endsWith("/api/v1")
   ? API_BASE_URL
   : `${API_BASE_URL}/api/v1`;
+
+// ML Server URL (ComfyUI + 비디오 생성)
+const ML_SERVER_URL = "http://16.184.61.191:8000";
 
 /**
  * ===============================
@@ -176,13 +179,11 @@ export async function createRenderSceneJob(
   scenarioId: string,
   sceneId: number
 ): Promise<CreateJobResponse> {
-  const body: CreateJobRequest = {
-    type: 'render_scene',
-    payload: {
-      scenario_id: scenarioId,
-      scene_ids: [sceneId],
-      options: {},
-    },
+  const body = {
+    scenario_id: scenarioId,
+    scene_id: sceneId,
+    job_type: "scene_video",
+    status: "pending"
   };
 
   const response = await fetch(`${API_V1_BASE_URL}/jobs`, {
@@ -209,13 +210,11 @@ export async function createMergeJob(
     throw new Error('sceneIds is empty');
   }
 
-  const body: CreateJobRequest = {
-    type: 'merge',
-    payload: {
-      scenario_id: scenarioId,
-      scene_ids: sceneIds,
-      options: {},
-    },
+  const body = {
+    scenario_id: scenarioId,
+    scene_id: null, // merge job에서는 scene_id가 없을 수 있음
+    job_type: "final_video",
+    status: "pending"
   };
 
   const response = await fetch(`${API_V1_BASE_URL}/jobs`, {
@@ -363,55 +362,76 @@ export const AIService = {
   },
 
   /**
-   * Screen3: 씬 비디오 생성 (백엔드 API 연동)
+   * Screen3: 씬 비디오 생성 (ml-server API 연동)
    */
   generateSceneVideo: async (
     scenarioId: string,
     sceneId: number,
-    _imageUrl?: string,
+    imageUrl?: string,
     options?: {
       onStatusChange?: (status: SceneUiStatus) => void;
     }
   ): Promise<string> => {
-  // 1) job 생성
-  const createdJob = await createRenderSceneJob(scenarioId, sceneId);
-  options?.onStatusChange?.(mapJobStatusToSceneStatus(createdJob.status));
+    // 1) 시나리오 정보 가져오기
+    const scenario = await requestJson<ApiScenarioResponse>(`/scenarios/${scenarioId}`);
+    const scene = scenario.scenes.find(s => s.id === sceneId);
+    if (!scene) {
+      throw new Error(`Scene ${sceneId} not found`);
+    }
 
-  // 2) polling
-  const completedJob = await pollJobUntilDone(createdJob.job_id, {
-    intervalMs: 2000,
-    timeoutMs: 1000 * 60 * 5,
-    onStatusChange: (job) => {
-      options?.onStatusChange?.(mapJobStatusToSceneStatus(job.status));
-    },
-  });
+    // 2) 캐릭터 이미지 가져오기 (임시로 imageUrl 사용)
+    let imageBlob: Blob;
+    if (imageUrl && imageUrl.startsWith('data:')) {
+      // base64 이미지를 blob으로 변환
+      const response = await fetch(imageUrl);
+      imageBlob = await response.blob();
+    } else {
+      throw new Error('Character image not found');
+    }
 
-  // 3) 최종 상태 확인
-  if (completedJob.status === 'failed') {
-    throw new Error(completedJob.error?.message ?? 'Scene render job failed.');
-  }
+    // 3) ml-server에 요청
+    const formData = new FormData();
+    formData.append('prompt', scene.video_prompt || scene.description);
+    formData.append('image', imageBlob, 'character.png');
+    formData.append('frame_count', '113');
+    formData.append('seed', '10');
 
-  if (completedJob.status === 'canceled') {
-    throw new Error('Scene render job was canceled.');
-  }
+    options?.onStatusChange?.('generating');
 
-  if (completedJob.status !== 'succeeded') {
-    throw new Error(`Unexpected job status: ${completedJob.status}`);
-  }
+    const generateResponse = await fetch(`${ML_SERVER_URL}/generate/${scenarioId}/${sceneId}`, {
+      method: 'POST',
+      body: formData
+    });
 
-  // 4) result.scenes[] 에서 해당 scene 찾기
-  const resultScenes = (completedJob.result as { scenes?: Array<{ id: number; video_url?: string }> } | undefined)?.scenes;
-  const matchedScene = resultScenes?.find((scene) => scene.id === sceneId);
+    if (!generateResponse.ok) {
+      throw new Error(`Failed to start video generation: ${generateResponse.statusText}`);
+    }
 
-  if (!matchedScene) {
-    throw new Error(`No scene result found for scene_id=${sceneId}`);
-  }
+    const generateResult = await generateResponse.json();
+    const promptId = generateResult.prompt_id;
 
-  if (!matchedScene.video_url) {
-    throw new Error(`Scene result has no video_url for scene_id=${sceneId}`);
-  }
+    // 4) 상태 폴링
+    while (true) {
+      await sleep(3000); // 3초 대기
 
-    return matchedScene.video_url;
+      const statusResponse = await fetch(`${ML_SERVER_URL}/status/${scenarioId}/${sceneId}/${promptId}`);
+      if (!statusResponse.ok) {
+        throw new Error(`Failed to check status: ${statusResponse.statusText}`);
+      }
+
+      const statusResult = await statusResponse.json();
+      
+      if (statusResult.status === 'completed') {
+        options?.onStatusChange?.('completed');
+        return statusResult.outputs[0] || '';
+      } else if (statusResult.status === 'failed') {
+        options?.onStatusChange?.('error');
+        throw new Error('Video generation failed');
+      }
+      
+      // 여전히 processing 상태
+      options?.onStatusChange?.('generating');
+    }
   },
 
   mergeVideos: async (scenarioId: string, sceneIds: number[]): Promise<string> => {

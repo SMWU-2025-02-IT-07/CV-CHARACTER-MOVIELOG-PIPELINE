@@ -1,56 +1,342 @@
 from fastapi import FastAPI, File, UploadFile, Form
+from fastapi.middleware.cors import CORSMiddleware
 from s3_uploader import S3Uploader
 import requests
 import uuid
 import os
+import json
 from pathlib import Path
+import threading
+from video_monitor import start_video_monitor
 
 app = FastAPI()
+
+# CORS 설정 추가
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://d1otafw1wb5gvu.cloudfront.net",
+        "http://localhost:3000",
+        "http://localhost:5173"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 uploader = S3Uploader()
 
-COMFYUI_URL = "http://localhost:8188"
+# 백그라운드에서 비디오 모니터링 시작
+def start_monitoring():
+    start_video_monitor()
 
-@app.post("/generate")
+monitor_thread = threading.Thread(target=start_monitoring, daemon=True)
+monitor_thread.start()
+
+COMFYUI_URL = "http://localhost:8188"
+BACKEND_URL = os.getenv('BACKEND_URL', 'http://43.202.58.164:8000')
+
+@app.post("/generate/{scenario_id}/{scene_id}")
 async def generate(
+    scenario_id: str,
+    scene_id: int,
     prompt: str = Form(...),
     image: UploadFile = File(...),
     frame_count: int = Form(113),
     seed: int = Form(10)
 ):
-    # 이미지 저장
-    input_dir = Path("./input")
-    input_dir.mkdir(exist_ok=True)
-    image_path = input_dir / f"{uuid.uuid4()}_{image.filename}"
+    # 이미지를 ComfyUI input 폴더에 저장
+    comfy_input_dir = Path("./ComfyUI/input")
+    comfy_input_dir.mkdir(exist_ok=True)
+    image_filename = f"{scenario_id}_scene_{scene_id}_{image.filename}"
+    image_path = comfy_input_dir / image_filename
     
     with open(image_path, "wb") as f:
         f.write(await image.read())
     
-    # 워크플로우 구성
+    print(f"Image saved to: {image_path}")
+    print(f"Scenario: {scenario_id}, Scene: {scene_id}")
+    
+    # LTX 워크플로우 구성
     workflow = {
-        "98": {"inputs": {"image": str(image_path.name)}},
-        "92": {"inputs": {"text": prompt, "value": frame_count, "noise_seed": seed}}
+        "98": {
+            "inputs": {
+                "image": image_filename
+            },
+            "class_type": "LoadImage"
+        },
+        "102": {
+            "inputs": {
+                "input": ["98", 0],
+                "resize_type": "scale dimensions",
+                "resize_type.width": 960,
+                "resize_type.height": 640,
+                "resize_type.crop": "center",
+                "scale_method": "lanczos"
+            },
+            "class_type": "ResizeImageMaskNode"
+        },
+        "1": {
+            "inputs": {
+                "ckpt_name": "ltx-2-19b-dev-fp8.safetensors"
+            },
+            "class_type": "CheckpointLoaderSimple"
+        },
+        "60": {
+            "inputs": {
+                "text_encoder": "gemma_3_12B_it.safetensors",
+                "ckpt_name": "ltx-2-19b-dev-fp8.safetensors",
+                "device": "default"
+            },
+            "class_type": "LTXAVTextEncoderLoader"
+        },
+        "3": {
+            "inputs": {
+                "text": prompt,
+                "clip": ["60", 0]
+            },
+            "class_type": "CLIPTextEncode"
+        },
+        "4": {
+            "inputs": {
+                "text": "blurry, low quality, still frame, frames, watermark, overlay, titles, has blurbox, has subtitles",
+                "clip": ["60", 0]
+            },
+            "class_type": "CLIPTextEncode"
+        },
+        "22": {
+            "inputs": {
+                "positive": ["3", 0],
+                "negative": ["4", 0],
+                "frame_rate": 25.0
+            },
+            "class_type": "LTXVConditioning"
+        },
+        "43": {
+            "inputs": {
+                "width": 960,
+                "height": 640,
+                "length": frame_count,
+                "batch_size": 1
+            },
+            "class_type": "EmptyLTXVLatentVideo"
+        },
+        "107": {
+            "inputs": {
+                "vae": ["1", 2],
+                "image": ["102", 0],
+                "latent": ["43", 0],
+                "strength": 1.0,
+                "bypass": False
+            },
+            "class_type": "LTXVImgToVideoInplace"
+        },
+        "48": {
+            "inputs": {
+                "ckpt_name": "ltx-2-19b-dev-fp8.safetensors"
+            },
+            "class_type": "LTXVAudioVAELoader"
+        },
+        "51": {
+            "inputs": {
+                "audio_vae": ["48", 0],
+                "frames_number": frame_count,
+                "frame_rate": 25,
+                "batch_size": 1
+            },
+            "class_type": "LTXVEmptyLatentAudio"
+        },
+        "56": {
+            "inputs": {
+                "video_latent": ["107", 0],
+                "audio_latent": ["51", 0]
+            },
+            "class_type": "LTXVConcatAVLatent"
+        },
+        "11": {
+            "inputs": {
+                "noise_seed": seed
+            },
+            "class_type": "RandomNoise"
+        },
+        "8": {
+            "inputs": {
+                "sampler_name": "euler"
+            },
+            "class_type": "KSamplerSelect"
+        },
+        "9": {
+            "inputs": {
+                "latent": ["56", 0],
+                "steps": 15,
+                "max_shift": 2.05,
+                "base_shift": 0.95,
+                "stretch": True,
+                "terminal": 0.1
+            },
+            "class_type": "LTXVScheduler"
+        },
+        "47": {
+            "inputs": {
+                "model": ["1", 0],
+                "positive": ["22", 0],
+                "negative": ["22", 1],
+                "cfg": 3.0
+            },
+            "class_type": "CFGGuider"
+        },
+        "41": {
+            "inputs": {
+                "noise": ["11", 0],
+                "guider": ["47", 0],
+                "sampler": ["8", 0],
+                "sigmas": ["9", 0],
+                "latent_image": ["56", 0]
+            },
+            "class_type": "SamplerCustomAdvanced"
+        },
+        "80": {
+            "inputs": {
+                "av_latent": ["41", 0]
+            },
+            "class_type": "LTXVSeparateAVLatent"
+        },
+        "113": {
+            "inputs": {
+                "samples": ["80", 0],
+                "vae": ["1", 2],
+                "tile_size": 512,
+                "overlap": 64,
+                "temporal_size": 64,
+                "temporal_overlap": 8
+            },
+            "class_type": "VAEDecodeTiled"
+        },
+        "96": {
+            "inputs": {
+                "samples": ["80", 1],
+                "audio_vae": ["48", 0]
+            },
+            "class_type": "LTXVAudioVAEDecode"
+        },
+        "97": {
+            "inputs": {
+                "images": ["113", 0],
+                "audio": ["96", 0],
+                "fps": 25.0
+            },
+            "class_type": "CreateVideo"
+        },
+        "75": {
+            "inputs": {
+                "video": ["97", 0],
+                "filename_prefix": f"videos/{scenario_id}/scene_{scene_id}",
+                "format": "auto",
+                "codec": "auto"
+            },
+            "class_type": "SaveVideo"
+        }
     }
     
     # ComfyUI 실행
     response = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow})
+    
+    if response.status_code != 200:
+        return {"error": f"ComfyUI error: {response.text}"}
+    
     prompt_id = response.json()["prompt_id"]
     
-    return {"prompt_id": prompt_id, "status": "processing"}
+    return {
+        "prompt_id": prompt_id, 
+        "status": "processing",
+        "scenario_id": scenario_id,
+        "scene_id": scene_id
+    }
 
-@app.get("/status/{prompt_id}")
-async def status(prompt_id: str):
+@app.get("/status/{scenario_id}/{scene_id}/{prompt_id}")
+async def status(scenario_id: str, scene_id: int, prompt_id: str):
     response = requests.get(f"{COMFYUI_URL}/history/{prompt_id}")
     history = response.json()
     
     if prompt_id in history and history[prompt_id].get("outputs"):
-        # 완료되면 S3 업로드
+        # 완료되면 S3 업로드 (scenario_id 기준)
         output_files = []
         for node_output in history[prompt_id]["outputs"].values():
-            if "videos" in node_output:
-                for video in node_output["videos"]:
-                    local_path = f"./output/{video['filename']}"
-                    s3_url = uploader.upload_file(local_path)
-                    output_files.append(s3_url)
+            for key in ["videos", "images"]:
+                if key in node_output:
+                    for video in node_output[key]:
+                        # 로컬 파일 경로
+                        if video.get("subfolder"):
+                            local_path = f"./output/{video['subfolder']}/{video['filename']}"
+                        else:
+                            local_path = f"./output/{video['filename']}"
+                        
+                        print(f"Uploading video to S3: {local_path}")
+                        try:
+                            # S3 업로드 (scenario_id 기준 경로)
+                            s3_key = f"videos/{scenario_id}/scene_{scene_id}.mp4"
+                            s3_url = uploader.upload_file_with_key(local_path, s3_key)
+                            output_files.append(s3_url)
+                            print(f"Successfully uploaded: {s3_url}")
+                            
+                            # Backend에 메타데이터 전송
+                            try:
+                                notify_payload = {
+                                    "scenario_id": scenario_id,
+                                    "scene_id": scene_id,
+                                    "video_url": s3_url,
+                                    "status": "completed"
+                                }
+                                notify_response = requests.post(
+                                    f"{BACKEND_URL}/api/v1/scenes/complete",
+                                    json=notify_payload,
+                                    timeout=10
+                                )
+                                print(f"Backend notification sent: {notify_response.status_code}")
+                            except Exception as e:
+                                print(f"Failed to notify backend: {e}")
+                                
+                        except Exception as e:
+                            print(f"Failed to upload {local_path}: {e}")
+        
+        return {"status": "completed", "outputs": output_files}
+    
+    return {"status": "processing"}
+
+# 기존 API 호환성 유지
+@app.post("/generate")
+async def generate_legacy(
+    prompt: str = Form(...),
+    image: UploadFile = File(...),
+    frame_count: int = Form(113),
+    seed: int = Form(10)
+):
+    # 임시 scenario_id, scene_id 생성
+    scenario_id = str(uuid.uuid4())
+    scene_id = 1
+    return await generate(scenario_id, scene_id, prompt, image, frame_count, seed)
+
+@app.get("/status/{prompt_id}")
+async def status_legacy(prompt_id: str):
+    # 기존 방식으로 처리 (scenario_id 없이)
+    response = requests.get(f"{COMFYUI_URL}/history/{prompt_id}")
+    history = response.json()
+    
+    if prompt_id in history and history[prompt_id].get("outputs"):
+        output_files = []
+        for node_output in history[prompt_id]["outputs"].values():
+            for key in ["videos", "images"]:
+                if key in node_output:
+                    for video in node_output[key]:
+                        if video.get("subfolder"):
+                            local_path = f"./output/{video['subfolder']}/{video['filename']}"
+                        else:
+                            local_path = f"./output/{video['filename']}"
+                        
+                        try:
+                            s3_url = uploader.upload_file(local_path)
+                            output_files.append(s3_url)
+                        except Exception as e:
+                            print(f"Failed to upload {local_path}: {e}")
         
         return {"status": "completed", "outputs": output_files}
     

@@ -46,7 +46,18 @@ def create(req: CreateScenarioRequest):
 
 @router.get("/{scenario_id}", response_model=CreateScenarioResponse)
 def get_one(scenario_id: str):
-    return get_scenario(scenario_id)
+    try:
+        print(f"\n=== 시나리오 조회 요청 ===")
+        print(f"시나리오 ID: {scenario_id}")
+        
+        result = get_scenario(scenario_id)
+        
+        print(f"시나리오 조회 성공: {len(result.scenes)}개 씬")
+        return result
+    except Exception as e:
+        print(f"Error in get_one endpoint: {e}")
+        print(traceback.format_exc())
+        raise
 
 
 @router.get("", response_model=list[CreateScenarioResponse])

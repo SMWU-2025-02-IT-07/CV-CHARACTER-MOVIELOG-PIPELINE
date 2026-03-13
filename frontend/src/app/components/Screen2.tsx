@@ -187,11 +187,11 @@ export function Screen2() {
             </h1>
 
             <p style={{ marginTop: "6px", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-              각 장면을 확인하고 수정할 수 있습니다
+              <b style={{ color: "var(--text-secondary)" }}>각 장면을 확인하고 수정할 수 있습니다</b>
             </p>
 
             {/* ✅ 안내 문구: 사용자가 오해하지 않게 */}
-            <p style={{ marginTop: "6px", color: "var(--text-muted)", fontSize: "0.78rem", lineHeight: 1.4 }}>
+            <p style={{ marginTop: "6px", color: "var(--text-secondary)", fontSize: "0.78rem", lineHeight: 1.4 }}>
               수정한 장면은 저장되며, <b style={{ color: "var(--text-secondary)" }}>영상 생성</b> 시 자동으로 반영됩니다
               {dirtyInfo.dirtyCount > 0 ? (
                 <>

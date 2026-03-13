@@ -40,6 +40,22 @@ def _normalize_scene_duration(scene: dict) -> dict:
         return normalized
     return scene
 
+
+def _normalize_scene_media(scene: dict) -> dict:
+    normalized = dict(scene)
+
+    # Older payloads stored the rendered video URL in image_url.
+    if (
+        not normalized.get("video_url")
+        and isinstance(normalized.get("image_url"), str)
+        and normalized["image_url"].lower().endswith(".mp4")
+    ):
+        normalized["video_url"] = normalized["image_url"]
+        normalized["image_url"] = None
+
+    normalized.pop("last_frame_filename", None)
+    return normalized
+
 def _build_regen_prompt(req: RegenerateScenarioRequest) -> str:
     sc = req.options.scene_count
     lang = req.options.lang
@@ -209,16 +225,15 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
     scenario_id = str(uuid4())
     
     # 캐릭터 이미지 S3 업로드
-    character_s3_url = upload_character_image_to_s3(image_data, scenario_id)
+    upload_character_image_to_s3(image_data, scenario_id)
 
     # 씬 데이터 처리 - 연속성을 위한 메타데이터 추가
     scenes_out: list[SceneOut] = []
     
-    for i, s in enumerate(data["scenes"]):
+    for s in data["scenes"]:
         print(f"씬 {s['scene_number']} 생성 완료")
         
         # 첫 번째 씬은 원본 캐릭터 이미지, 이후는 이전 씬의 last_frame 사용 예정
-        input_image_source = "character_original" if i == 0 else f"scene_{i}_last_frame"
         
         scene_out = SceneOut(
             id=s["scene_number"],
@@ -263,12 +278,10 @@ def get_scene_for_generation(scenario_id: str, scene_id: int) -> dict:
         raise AppError("NOT_FOUND", f"Scene {scene_id} not found", status_code=404)
     
     # 씬별 입력 이미지 소스 결정
-    input_image_source = "character_original" if scene_id == 1 else f"scene_{scene_id-1}_last_frame"
     
     return {
         "scene_id": scene_id,
         "video_prompt": scene.video_prompt,
-        "input_image_source": input_image_source,
         "duration": scene.duration
     }
 
@@ -326,7 +339,7 @@ def get_scenario(scenario_id: str) -> CreateScenarioResponse:
 
     try:
         payload = json.loads(p.read_text(encoding="utf-8"))
-        scenes = [_normalize_scene_duration(s) for s in payload["scenes"]]
+        scenes = [_normalize_scene_media(_normalize_scene_duration(s)) for s in payload["scenes"]]
         return CreateScenarioResponse.model_validate(
             {"scenario_id": payload["scenario_id"], "scenes": scenes}
         )
@@ -345,7 +358,7 @@ def list_scenarios(limit: int = 20, offset: int = 0) -> list[CreateScenarioRespo
     for f in sliced:
         try:
             payload = json.loads(f.read_text(encoding="utf-8"))
-            scenes = [_normalize_scene_duration(s) for s in payload["scenes"]]
+            scenes = [_normalize_scene_media(_normalize_scene_duration(s)) for s in payload["scenes"]]
             items.append(
                 CreateScenarioResponse.model_validate(
                     {"scenario_id": payload["scenario_id"], "scenes": scenes}
@@ -370,6 +383,7 @@ def regenerate_scenario(scenario_id: str, req: RegenerateScenarioRequest) -> Reg
             image_prompt=s["image_prompt"],
             video_prompt=s["video_prompt"],
             image_url=None,
+            video_url=None,
         )
         for s in data["scenes"]
     ]

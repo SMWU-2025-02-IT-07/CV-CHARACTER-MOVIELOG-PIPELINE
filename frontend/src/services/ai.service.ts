@@ -18,8 +18,9 @@ interface ApiScene {
   description: string;
   duration: number;
   image_url?: string | null;
+  video_url?: string | null;
   image_prompt?: string | null;
-
+  video_prompt?: string | null;
 }
 
 interface ApiScenarioResponse {
@@ -144,6 +145,7 @@ function mapApiScene(scene: ApiScene): SceneOutput {
     description: scene.description,
     duration: scene.duration,
     imageUrl: scene.image_url ?? undefined,
+    videoUrl: scene.video_url ?? undefined,
     imagePrompt: scene.image_prompt ?? undefined,
   };
 }

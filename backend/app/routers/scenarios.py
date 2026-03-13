@@ -7,6 +7,9 @@ from app.schemas.scenario import (
     RegenerateScenarioRequest,
     RegenerateScenarioResponse,
 )
+
+from app.schemas.library import LibraryScenarioSummary, LibraryScenarioDetail
+
 from app.services.scenario_service import (
     create_scenario,
     get_scenario,
@@ -14,8 +17,16 @@ from app.services.scenario_service import (
     regenerate_scenario,
 )
 
+from app.services.scenario_library_service import (
+    list_scenarios,
+    load_scenario_metadata,
+)
+
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
+# =========================
+# 생성 API
+# =========================
 @router.post("", response_model=CreateScenarioResponse)
 def create(req: CreateScenarioRequest):
     try:
@@ -65,7 +76,42 @@ def list_all(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    return list_scenarios(limit=limit, offset=offset)
+    rows = list_scenarios(limit=limit, offset=offset)
+    result = []
+
+    for row in rows:
+        result.append(
+            LibraryScenarioSummary(
+                scenario_id=row["scenario_id"],
+                title=row.get("title", row.get("brief", "Untitled Scenario")),
+                created_at=row["created_at"],
+                updated_at=row.get("updated_at"),
+                status=row.get("status", "pending"),
+                thumbnail_url=row.get("thumbnail_url"),
+                final_video_url=row.get("final_video_url"),
+            )
+        )
+
+    return result
+
+
+@router.get("/{scenario_id}", response_model=LibraryScenarioDetail)
+def get_one(scenario_id: str):
+    row = load_scenario_metadata(scenario_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+
+    return LibraryScenarioDetail(
+        scenario_id=row["scenario_id"],
+        title=row.get("title", row.get("brief", "Untitled Scenario")),
+        brief=row.get("brief", ""),
+        created_at=row["created_at"],
+        updated_at=row.get("updated_at"),
+        status=row.get("status", "pending"),
+        thumbnail_url=row.get("thumbnail_url"),
+        final_video_url=row.get("final_video_url"),
+        scenes=row.get("scenes", []),
+    )
 
 
 @router.post("/{scenario_id}/regenerate", response_model=RegenerateScenarioResponse)

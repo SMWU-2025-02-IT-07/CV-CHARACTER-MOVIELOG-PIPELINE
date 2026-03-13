@@ -438,31 +438,11 @@ export const AIService = {
       throw new Error(`Scene ${sceneId} not found`);
     }
 
-    // 2) 미리보기 이미지 사용 (있을 경우)
-    let imageBlob: Blob | null = null;
-    
-    if (scene.imageUrl && scene.imageUrl.startsWith('https://')) {
-      // S3 미리보기 이미지 사용 - 빈 FormData로 전송
-      console.log('Using preview image from S3:', scene.imageUrl);
-    } else if (imageUrl && imageUrl.startsWith('data:')) {
-      // base64 이미지를 blob으로 변환 (캐릭터 원본)
-      const response = await fetch(imageUrl);
-      imageBlob = await response.blob();
-    } else {
-      throw new Error('No preview image found. Please generate preview first.');
-    }
-
-    // 3) ml-server에 요청
+    // 2) FormData 생성 - 이미지는 보내지 않고 ML 서버가 S3에서 직접 다운로드하도록
     const formData = new FormData();
     formData.append('prompt', scene.video_prompt || scene.description);
-    
-    if (imageBlob) {
-      formData.append('image', imageBlob, 'input.png');
-    } else {
-      // 빈 파일로 전송 (S3에서 다운로드하도록)
-      formData.append('image', new Blob(), 'undefined');
-    }
-    
+    // 빈 파일 전송하여 ML 서버가 S3에서 미리보기 이미지를 다운로드하도록 함
+    formData.append('image', new Blob(), '');
     formData.append('frame_count', '113');
     formData.append('seed', '10');
 

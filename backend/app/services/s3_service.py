@@ -131,7 +131,7 @@ def upload_scene_video_to_s3(video_path: str, scene_id: int, scenario_id: str) -
         print(f"씬 비디오 S3 업로드 실패: {e}")
         return ""
 
-def upload_final_video_to_s3(video_path: str, scenario_id: str) -> str:
+def upload_final_video_to_s3(scenario_id: str, video_path: str) -> str:
     """
     최종 병합 비디오를 S3에 업로드
     

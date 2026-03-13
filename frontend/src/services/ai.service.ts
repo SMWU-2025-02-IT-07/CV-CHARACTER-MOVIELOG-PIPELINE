@@ -504,31 +504,65 @@ export const AIService = {
     }
   },
 
-  mergeVideos: async (scenarioId: string, sceneIds: number[]): Promise<string> => {
-    const createdJob = await createMergeJob(scenarioId, sceneIds);
-    const completedJob = await pollJobUntilDone(createdJob.job_id, {
-      intervalMs: 2000,
-      timeoutMs: 1000 * 60 * 5,
+  /**
+   * Screen3: 비디오 병합 (ML 서버 위임)
+   */
+  mergeVideos: async (
+    scenarioId: string, 
+    sceneIds: number[],
+    options?: {
+      onStatusChange?: (status: 'pending' | 'processing' | 'completed' | 'error', progress?: number) => void;
+    }
+  ): Promise<string> => {
+    // 1) 병합 시작 요청
+    const mergeResponse = await fetch(`${API_V1_BASE_URL}/video-merge/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scenario_id: scenarioId,
+        force_merge: false
+      })
     });
 
-    if (completedJob.status === 'failed') {
-      throw new Error(completedJob.error?.message ?? 'Merge job failed.');
+    if (!mergeResponse.ok) {
+      throw new Error(`Failed to start video merge: ${mergeResponse.statusText}`);
     }
 
-    if (completedJob.status === 'canceled') {
-      throw new Error('Merge job was canceled.');
+    const mergeResult = await mergeResponse.json();
+    
+    if (mergeResult.status === 'error') {
+      throw new Error(mergeResult.message || 'Video merge failed');
     }
 
-    if (completedJob.status !== 'succeeded') {
-      throw new Error(`Unexpected merge job status: ${completedJob.status}`);
-    }
+    // 2) 상태 폴링 (2초마다)
+    options?.onStatusChange?.('processing', 0);
+    
+    while (true) {
+      await sleep(2000);
 
-    const mergedUrl = (completedJob.result as { merged_url?: string } | undefined)?.merged_url;
-    if (!mergedUrl) {
-      throw new Error('Merge job succeeded but merged_url is missing.');
-    }
+      const statusResponse = await fetch(`${API_V1_BASE_URL}/video-merge/status/${scenarioId}`);
+      if (!statusResponse.ok) {
+        throw new Error(`Failed to check merge status: ${statusResponse.statusText}`);
+      }
 
-    return mergedUrl;
+      const statusResult = await statusResponse.json();
+      
+      // 진행률 업데이트
+      if (statusResult.progress !== undefined) {
+        options?.onStatusChange?.('processing', statusResult.progress);
+      }
+      
+      if (statusResult.status === 'completed') {
+        options?.onStatusChange?.('completed', 100);
+        return statusResult.final_video_url;
+      } else if (statusResult.status === 'error') {
+        options?.onStatusChange?.('error');
+        throw new Error(statusResult.message || 'Video merge failed');
+      }
+      
+      // 여전히 processing 상태
+      options?.onStatusChange?.('processing', statusResult.progress || 0);
+    }
   },
   
   getScenarioList: async (): Promise<LibraryScenarioSummary[]> => {

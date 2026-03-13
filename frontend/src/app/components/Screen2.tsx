@@ -12,7 +12,7 @@ export function Screen2() {
   const [editingSceneId, setEditingSceneId] = useState<number | null>(null);
   const [editedDescription, setEditedDescription] = useState("");
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [generatingPreviewId, setGeneratingPreviewId] = useState<number | null>(null);
+  const [previewStatuses, setPreviewStatuses] = useState<Record<number, 'pending' | 'generating' | 'completed' | 'error'>>({});
 
   // ✅ "마지막으로 서버에서 받은 scenes"를 기준(baseline)으로 저장
   // - 변경사항(dirty) 여부 판단
@@ -26,6 +26,62 @@ export function Screen2() {
       baselineScenesRef.current = scenes;
     }
   }, [scenes]);
+
+  // 자동으로 모든 씬의 미리보기 생성
+  useEffect(() => {
+    if (scenes.length > 0 && scenarioId) {
+      // 초기 상태 설정
+      const initialStatuses: Record<number, 'pending' | 'generating' | 'completed' | 'error'> = {};
+      scenes.forEach(scene => {
+        if (scene.imageUrl) {
+          initialStatuses[scene.id] = 'completed';
+        } else {
+          initialStatuses[scene.id] = 'pending';
+        }
+      });
+      setPreviewStatuses(initialStatuses);
+
+      // 모든 씬의 미리보기 자동 생성
+      generateAllPreviews();
+    }
+  }, [scenarioId]);
+
+  const generateAllPreviews = async () => {
+    for (const scene of scenes) {
+      // 이미 이미지가 있으면 스킵
+      if (scene.imageUrl) {
+        setPreviewStatuses(prev => ({ ...prev, [scene.id]: 'completed' }));
+        continue;
+      }
+
+      setPreviewStatuses(prev => ({ ...prev, [scene.id]: 'generating' }));
+      
+      try {
+        const previewUrl = await AIService.generateScenePreview(
+          scenarioId,
+          scene.id,
+          characterData.imageUrl,
+          {
+            onStatusChange: (status) => {
+              console.log(`Preview ${scene.id} status:`, status);
+            }
+          }
+        );
+        
+        // 생성된 미리보기 이미지 URL을 씬에 저장
+        setScenes(prevScenes => prevScenes.map(s => 
+          s.id === scene.id 
+            ? { ...s, imageUrl: previewUrl }
+            : s
+        ));
+        
+        setPreviewStatuses(prev => ({ ...prev, [scene.id]: 'completed' }));
+      } catch (error) {
+        console.error(`Preview generation error for scene ${scene.id}:`, error);
+        setPreviewStatuses(prev => ({ ...prev, [scene.id]: 'error' }));
+      }
+    }
+  };
 
   // ✅ 변경사항 카운트
   const dirtyInfo = useMemo(() => {
@@ -68,12 +124,12 @@ export function Screen2() {
   };
 
   /**
-   * ✅ 씬 미리보기 이미지 생성
+   * ✅ 씬 미리보기 이미지 재생성 (수동)
    */
-  const handleGeneratePreview = async (sceneId: number) => {
+  const handleRegeneratePreview = async (sceneId: number) => {
     if (!scenarioId) return;
     
-    setGeneratingPreviewId(sceneId);
+    setPreviewStatuses(prev => ({ ...prev, [sceneId]: 'generating' }));
     try {
       const previewUrl = await AIService.generateScenePreview(
         scenarioId,
@@ -93,11 +149,11 @@ export function Screen2() {
           : scene
       ));
       
+      setPreviewStatuses(prev => ({ ...prev, [sceneId]: 'completed' }));
     } catch (error) {
       console.error('Preview generation error:', error);
       alert('미리보기 이미지 생성에 실패했습니다.');
-    } finally {
-      setGeneratingPreviewId(null);
+      setPreviewStatuses(prev => ({ ...prev, [sceneId]: 'error' }));
     }
   };
 
@@ -333,31 +389,33 @@ export function Screen2() {
 
                 {editingSceneId !== scene.id && (
                   <div style={{ display: "flex", gap: "6px" }}>
-                    <button
-                      onClick={() => handleGeneratePreview(scene.id)}
-                      disabled={generatingPreviewId === scene.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "5px",
-                        padding: "5px 10px",
-                        borderRadius: "calc(var(--radius) - 4px)",
-                        background: "transparent",
-                        border: "1px solid var(--glass-border)",
-                        color: "var(--text-muted)",
-                        fontSize: "0.7rem",
-                        cursor: generatingPreviewId === scene.id ? "wait" : "pointer",
-                        fontFamily: "var(--font-mono)",
-                        letterSpacing: "0.05em",
-                        textTransform: "uppercase",
-                        transition: "border-color 0.2s, color 0.2s",
-                        opacity: generatingPreviewId === scene.id ? 0.7 : 1,
-                      }}
-                      title="씬 미리보기 이미지 생성"
-                    >
-                      <Image size={11} />
-                      {generatingPreviewId === scene.id ? "GENERATING" : "PREVIEW"}
-                    </button>
+                    {(previewStatuses[scene.id] === 'completed' || previewStatuses[scene.id] === 'error') && (
+                      <button
+                        onClick={() => handleRegeneratePreview(scene.id)}
+                        disabled={previewStatuses[scene.id] === 'generating'}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          padding: "5px 10px",
+                          borderRadius: "calc(var(--radius) - 4px)",
+                          background: "transparent",
+                          border: "1px solid var(--glass-border)",
+                          color: "var(--text-muted)",
+                          fontSize: "0.7rem",
+                          cursor: previewStatuses[scene.id] === 'generating' ? "wait" : "pointer",
+                          fontFamily: "var(--font-mono)",
+                          letterSpacing: "0.05em",
+                          textTransform: "uppercase",
+                          transition: "border-color 0.2s, color 0.2s",
+                          opacity: previewStatuses[scene.id] === 'generating' ? 0.7 : 1,
+                        }}
+                        title="씬 미리보기 이미지 재생성"
+                      >
+                        <RefreshCw size={11} style={{ animation: previewStatuses[scene.id] === 'generating' ? 'spin 0.8s linear infinite' : 'none' }} />
+                        REGENERATE
+                      </button>
+                    )}
                     <button
                       onClick={() => handleEditScene(scene.id, scene.description)}
                       style={{
@@ -464,7 +522,7 @@ export function Screen2() {
                         gap: "8px",
                       }}
                     >
-                      {generatingPreviewId === scene.id ? (
+                      {previewStatuses[scene.id] === 'generating' ? (
                         <>
                           <RefreshCw size={20} style={{ color: "var(--text-muted)", animation: "spin 1s linear infinite" }} />
                           <span
@@ -479,9 +537,24 @@ export function Screen2() {
                             Generating...
                           </span>
                         </>
+                      ) : previewStatuses[scene.id] === 'error' ? (
+                        <>
+                          <X size={20} style={{ color: "#ef4444" }} />
+                          <span
+                            style={{
+                              fontFamily: "var(--font-mono)",
+                              fontSize: "0.65rem",
+                              color: "#ef4444",
+                              letterSpacing: "0.1em",
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            Error
+                          </span>
+                        </>
                       ) : (
                         <>
-                          <Play size={20} style={{ color: "var(--text-muted)" }} />
+                          <Image size={20} style={{ color: "var(--text-muted)" }} />
                           <span
                             style={{
                               fontFamily: "var(--font-mono)",

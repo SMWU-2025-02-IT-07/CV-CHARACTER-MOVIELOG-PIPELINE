@@ -14,6 +14,8 @@ export function Screen3() {
   const { scenes, characterData, scenarioId, setScenes, setFinalVideoUrl } = useAppContext();
   const [sceneStatuses, setSceneStatuses] = useState<Record<number, SceneUiStatus>>({});
   const [regeneratingScene, setRegeneratingScene] = useState<number | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeProgress, setMergeProgress] = useState(0);
 
   useEffect(() => {
     const initialStatuses: Record<number, SceneUiStatus> = {};
@@ -71,13 +73,32 @@ export function Screen3() {
 
   const handleMergeAndComplete = async () => {
     try {
+      setIsMerging(true);
+      setMergeProgress(0);
+      
       const sceneIdsToMerge = scenes.filter(scene => !!scene.videoUrl).map(scene => scene.id);
-      if (sceneIdsToMerge.length === 0) { alert('?�성???�상???�습?�다.'); return; }
-      const finalUrl = await AIService.mergeVideos(scenarioId, sceneIdsToMerge);
+      if (sceneIdsToMerge.length === 0) { 
+        alert('생성된 영상이 없습니다.'); 
+        setIsMerging(false);
+        return; 
+      }
+      
+      const finalUrl = await AIService.mergeVideos(scenarioId, sceneIdsToMerge, {
+        onStatusChange: (status, progress) => {
+          if (progress !== undefined) {
+            setMergeProgress(progress);
+          }
+        }
+      });
+      
       setFinalVideoUrl(finalUrl);
       navigate("/result");
     } catch (error) {
-      alert('?�상 병합???�패?�습?�다.');
+      console.error('Video merge error:', error);
+      alert('영상 병합에 실패했습니다.');
+    } finally {
+      setIsMerging(false);
+      setMergeProgress(0);
     }
   };
 
@@ -102,10 +123,10 @@ export function Screen3() {
       <div className="fade-up fade-up-1" style={{ marginBottom: '1.75rem' }}>
         <div className="eyebrow" style={{ marginBottom: '0.75rem' }}>Scene Rendering</div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>
-          ?�별<span className="gradient-brand-text">?�상 ?�성</span> �?
+          개별<span className="gradient-brand-text">영상 생성</span> 중
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-          �??�의 ?�상???�인?�고 마음???��? ?�으�??�생?�할 ???�습?�다
+          각각의 영상을 확인하고 마음에 들지 않으면 재생성할 수 있습니다
         </p>
       </div>
 
@@ -211,7 +232,6 @@ export function Screen3() {
                       style={{ borderRadius: 'calc(var(--radius) - 2px)' }}
                       onError={(error) => {
                         console.error(`Video error for scene ${scene.id}:`, error);
-                        // 에러 시 상태를 error로 변경
                         setSceneStatuses(prev => ({ ...prev, [scene.id]: 'error' }));
                       }}
                     />
@@ -219,7 +239,6 @@ export function Screen3() {
                     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                       {status === 'generating' ? (
                         <>
-                          {/* Animated spinner */}
                           <div style={{ position: 'relative', width: '40px', height: '40px' }}>
                             <div style={{
                               position: 'absolute', inset: 0, borderRadius: '50%',
@@ -277,21 +296,43 @@ export function Screen3() {
 
       {/* Merge CTA or Loading notice */}
       {allCompleted ? (
-        <div className="fade-up" style={{ display: 'flex', justifyContent: 'center' }}>
-          <button
-            className="btn-cinema-primary"
-            onClick={handleMergeAndComplete}
-            style={{
-              padding: '0 36px', height: '54px',
-              fontSize: '1rem', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-              fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em',
-              borderRadius: 'calc(var(--radius) * 1.2)',
-            }}
-          >
-            <Sparkles size={18} />
-            ?�상 병합 �??�료
-          </button>
+        <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Merge Progress */}
+          {isMerging && (
+            <div className="cinema-card" style={{ padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-secondary)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  MERGING VIDEOS
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-accent)', fontWeight: 700 }}>
+                  {mergeProgress}%
+                </span>
+              </div>
+              <div className="cinema-progress-track">
+                <div className="cinema-progress-fill" style={{ width: `${mergeProgress}%` }} />
+              </div>
+            </div>
+          )}
+          
+          {/* Merge Button */}
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <button
+              className="btn-cinema-primary"
+              onClick={handleMergeAndComplete}
+              disabled={isMerging}
+              style={{
+                padding: '0 36px', height: '54px',
+                fontSize: '1rem', cursor: isMerging ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em',
+                borderRadius: 'calc(var(--radius) * 1.2)',
+                opacity: isMerging ? 0.6 : 1,
+              }}
+            >
+              <Sparkles size={18} style={{ animation: isMerging ? 'spin 1s linear infinite' : 'none' }} />
+              {isMerging ? '병합 중...' : '영상 병합 및 완료'}
+            </button>
+          </div>
         </div>
       ) : (
         <div style={{
@@ -306,7 +347,7 @@ export function Screen3() {
           }} />
           <div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              ?�상???�성?�고 ?�습?�다. ?�시�?기다?�주?�요...
+              영상을 생성하고 있습니다. 잠시만 기다려주세요...
             </p>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
               {completedCount}/{totalCount} SCENES COMPLETE

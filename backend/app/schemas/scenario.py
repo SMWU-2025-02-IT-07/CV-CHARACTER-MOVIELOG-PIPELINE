@@ -31,6 +31,7 @@ class SceneOut(BaseModel):
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
     image_url: Optional[str] = None
+    video_url: Optional[str] = None
 
 class CreateScenarioResponse(BaseModel):
     scenario_id: str

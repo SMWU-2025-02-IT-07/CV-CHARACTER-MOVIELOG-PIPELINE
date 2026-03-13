@@ -18,8 +18,9 @@ interface ApiScene {
   description: string;
   duration: number;
   image_url?: string | null;
+  video_url?: string | null;
   image_prompt?: string | null;
-
+  video_prompt?: string | null;
 }
 
 interface ApiScenarioResponse {
@@ -144,6 +145,7 @@ function mapApiScene(scene: ApiScene): SceneOutput {
     description: scene.description,
     duration: scene.duration,
     imageUrl: scene.image_url ?? undefined,
+    videoUrl: scene.video_url ?? undefined,
     imagePrompt: scene.image_prompt ?? undefined,
   };
 }
@@ -379,7 +381,7 @@ export const AIService = {
       throw new Error(`Scene ${sceneId} not found`);
     }
 
-    // 2) 캐릭터 이미지 가져오기 (임시로 imageUrl 사용)
+    // 2) 현재 렌더 입력은 원본 캐릭터 이미지(imageUrl)만 사용
     let imageBlob: Blob;
     if (imageUrl && imageUrl.startsWith('data:')) {
       // base64 이미지를 blob으로 변환

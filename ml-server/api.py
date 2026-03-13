@@ -37,13 +37,19 @@ async def generate(
     frame_count: int = Form(113),
     seed: int = Form(10)
 ):
+    print(f"\n=== Video generation request ===")
+    print(f"Scenario: {scenario_id}, Scene: {scene_id}")
+    print(f"Prompt: {prompt[:100]}...")
+    print(f"Image filename: {image.filename}")
+    
     # 이미지를 ComfyUI input 폴더에 저장
     comfy_input_dir = Path("./ComfyUI/input")
     comfy_input_dir.mkdir(exist_ok=True)
     
     # 미리보기 이미지가 있으면 사용, 없으면 업로드된 이미지 사용
-    if image.filename and image.filename != "undefined":
+    if image.filename and image.filename != "undefined" and image.filename != "":
         # 직접 업로드된 이미지 (캐릭터 원본 또는 미리보기)
+        print(f"Using uploaded image: {image.filename}")
         image_filename = f"{scenario_id}_scene_{scene_id}_{image.filename}"
         image_path = comfy_input_dir / image_filename
         
@@ -51,16 +57,18 @@ async def generate(
             f.write(await image.read())
     else:
         # S3에서 씬별 생성된 이미지 다운로드 (핵심 변경!)
+        print(f"No uploaded image, downloading from S3...")
         try:
             import boto3
             s3 = boto3.client('s3')
-            bucket = os.getenv('S3_BUCKET_NAME', 'cv-character-movielog-pipeline')
+            bucket = os.getenv('S3_BUCKET_NAME', 'comfyui-ml-v2-videos-c8f7625e')
             # 씬별 생성된 이미지 사용!
             s3_key = f"preview/{scenario_id}/scene_{scene_id}.png"
             
             image_filename = f"{scenario_id}_scene_{scene_id}_preview.png"
             image_path = comfy_input_dir / image_filename
             
+            print(f"Downloading from S3: s3://{bucket}/{s3_key}")
             s3.download_file(bucket, s3_key, str(image_path))
             print(f"Downloaded scene-specific image from S3: {s3_key}")
         except Exception as e:
@@ -70,6 +78,7 @@ async def generate(
                 s3_key_fallback = f"characters/{scenario_id}/input.png"
                 image_filename = f"{scenario_id}_character_fallback.png"
                 image_path = comfy_input_dir / image_filename
+                print(f"Trying fallback: s3://{bucket}/{s3_key_fallback}")
                 s3.download_file(bucket, s3_key_fallback, str(image_path))
                 print(f"Using fallback character image: {s3_key_fallback}")
             except Exception as e2:
@@ -77,7 +86,7 @@ async def generate(
                 return {"error": "Neither scene image nor character image found. Please generate preview first."}
     
     print(f"Image saved to: {image_path}")
-    print(f"Scenario: {scenario_id}, Scene: {scene_id}")
+    print(f"Image file size: {os.path.getsize(image_path)} bytes")
     
     # LTX 워크플로우 구성
     workflow = {
@@ -261,12 +270,26 @@ async def generate(
     }
     
     # ComfyUI 실행
-    response = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow})
+    print(f"Sending request to ComfyUI: {COMFYUI_URL}/prompt")
+    try:
+        response = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow}, timeout=30)
+        print(f"ComfyUI response status: {response.status_code}")
+    except Exception as e:
+        print(f"ComfyUI request failed: {e}")
+        return {"error": f"ComfyUI connection error: {str(e)}"}
     
     if response.status_code != 200:
+        print(f"ComfyUI error response: {response.text}")
         return {"error": f"ComfyUI error: {response.text}"}
     
-    prompt_id = response.json()["prompt_id"]
+    result = response.json()
+    prompt_id = result.get("prompt_id")
+    
+    if not prompt_id:
+        print(f"No prompt_id in response: {result}")
+        return {"error": "No prompt_id returned from ComfyUI"}
+    
+    print(f"ComfyUI prompt_id: {prompt_id}")
     
     return {
         "prompt_id": prompt_id, 

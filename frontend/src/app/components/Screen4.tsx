@@ -3,6 +3,7 @@
 import { Play, Download, Share2, RefreshCw, Sparkles, Pause, SkipForward, SkipBack, CheckCircle } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAppContext } from "@/context/AppContext";
+import { SafeVideoPlayer } from "@/app/components/SafeVideoPlayer";
 import { useNavigate } from "react-router-dom";
 
 interface Playlist {
@@ -114,76 +115,13 @@ export function Screen4() {
             onClick={handlePlayPause}
           >
             {getCurrentVideoUrl() ? (
-              <>
-                <video
-                  ref={videoRef}
-                  src={getCurrentVideoUrl()}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  onEnded={handleVideoEnded}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-
-                {/* Play/Pause overlay */}
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'opacity 0.3s ease',
-                  opacity: isPlaying ? 0 : 1,
-                  background: isPlaying ? 'transparent' : 'rgba(0,0,0,0.3)',
-                }}>
-                  {/* Pulse rings */}
-                  {!isPlaying && (
-                    <>
-                      <div style={{ position: 'absolute', width: '80px', height: '80px', borderRadius: '50%', border: '1px solid rgba(124,58,237,0.3)', animation: 'ping 2s infinite' }} />
-                      <div style={{ position: 'absolute', width: '64px', height: '64px', borderRadius: '50%', border: '1px solid rgba(124,58,237,0.2)', animation: 'ping 2s 0.5s infinite' }} />
-                    </>
-                  )}
-                  <div style={{
-                    width: '56px', height: '56px', borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    zIndex: 2, boxShadow: '0 0 30px rgba(124,58,237,0.3)',
-                  }}>
-                    {isPlaying
-                      ? <Pause size={22} style={{ color: 'white' }} />
-                      : <Play size={22} style={{ color: 'white', marginLeft: '2px' }} />
-                    }
-                  </div>
-                </div>
-
-                {/* Controls overlay */}
-                <div style={{
-                  position: 'absolute', bottom: '12px', left: '12px', right: '12px',
-                  display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-                  opacity: 0, transition: 'opacity 0.25s ease',
+              <SafeVideoPlayer
+                src={getCurrentVideoUrl()}
+                style={{ width: '100%', height: '100%', borderRadius: 'calc(var(--radius) - 2px)' }}
+                onError={(error) => {
+                  console.error('Final video playback error:', error);
                 }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {playlist && (
-                      <>
-                        <button onClick={(e) => { e.stopPropagation(); handlePrevVideo(); }} disabled={currentVideoIndex === 0}
-                          style={{ padding: '6px 8px', borderRadius: '6px', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', opacity: currentVideoIndex === 0 ? 0.4 : 1 }}>
-                          <SkipBack size={14} style={{ color: 'white' }} />
-                        </button>
-                        <div style={{ padding: '5px 10px', borderRadius: '6px', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'white' }}>
-                          {currentVideoIndex + 1} / {playlist.videos.length}
-                        </div>
-                        <button onClick={(e) => { e.stopPropagation(); handleNextVideo(); }} disabled={currentVideoIndex === playlist.videos.length - 1}
-                          style={{ padding: '6px 8px', borderRadius: '6px', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', opacity: currentVideoIndex === playlist.videos.length - 1 ? 0.4 : 1 }}>
-                          <SkipForward size={14} style={{ color: 'white' }} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  <div style={{ padding: '5px 10px', borderRadius: '6px', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'white' }}>
-                    1080p
-                  </div>
-                </div>
-              </>
+              />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                 <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Loading...</p>

@@ -364,6 +364,63 @@ export const AIService = {
   },
 
   /**
+   * Screen2: 씬 미리보기 이미지 생성
+   */
+  generateScenePreview: async (
+    scenarioId: string,
+    sceneId: number,
+    characterImageUrl?: string,
+    options?: {
+      onStatusChange?: (status: 'generating' | 'completed' | 'error') => void;
+    }
+  ): Promise<string> => {
+    try {
+      // 1) 백엔드에 미리보기 생성 요청
+      options?.onStatusChange?.('generating');
+      
+      const generateResponse = await fetch(`${API_V1_BASE_URL}/scenarios/${scenarioId}/scenes/${sceneId}/preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!generateResponse.ok) {
+        throw new Error(`Failed to start preview generation: ${generateResponse.statusText}`);
+      }
+
+      const generateResult = await generateResponse.json();
+      const promptId = generateResult.prompt_id;
+
+      // 2) 상태 폴링
+      while (true) {
+        await sleep(2000); // 2초 대기
+
+        const statusResponse = await fetch(`${API_V1_BASE_URL}/scenarios/${scenarioId}/scenes/${sceneId}/preview/${promptId}`);
+        if (!statusResponse.ok) {
+          throw new Error(`Failed to check preview status: ${statusResponse.statusText}`);
+        }
+
+        const statusResult = await statusResponse.json();
+        
+        if (statusResult.status === 'completed') {
+          options?.onStatusChange?.('completed');
+          return statusResult.outputs[0] || '';
+        } else if (statusResult.status === 'failed') {
+          options?.onStatusChange?.('error');
+          throw new Error('Preview generation failed');
+        }
+        
+        // 여전히 processing 상태
+        options?.onStatusChange?.('generating');
+      }
+    } catch (error) {
+      options?.onStatusChange?.('error');
+      throw error;
+    }
+  },
+
+  /**
    * Screen3: 씬 비디오 생성 (ml-server API 연동)
    */
   generateSceneVideo: async (
@@ -381,20 +438,31 @@ export const AIService = {
       throw new Error(`Scene ${sceneId} not found`);
     }
 
-    // 2) 현재 렌더 입력은 원본 캐릭터 이미지(imageUrl)만 사용
-    let imageBlob: Blob;
-    if (imageUrl && imageUrl.startsWith('data:')) {
-      // base64 이미지를 blob으로 변환
+    // 2) 미리보기 이미지 사용 (있을 경우)
+    let imageBlob: Blob | null = null;
+    
+    if (scene.imageUrl && scene.imageUrl.startsWith('https://')) {
+      // S3 미리보기 이미지 사용 - 빈 FormData로 전송
+      console.log('Using preview image from S3:', scene.imageUrl);
+    } else if (imageUrl && imageUrl.startsWith('data:')) {
+      // base64 이미지를 blob으로 변환 (캐릭터 원본)
       const response = await fetch(imageUrl);
       imageBlob = await response.blob();
     } else {
-      throw new Error('Character image not found');
+      throw new Error('No preview image found. Please generate preview first.');
     }
 
     // 3) ml-server에 요청
     const formData = new FormData();
     formData.append('prompt', scene.video_prompt || scene.description);
-    formData.append('image', imageBlob, 'character.png');
+    
+    if (imageBlob) {
+      formData.append('image', imageBlob, 'input.png');
+    } else {
+      // 빈 파일로 전송 (S3에서 다운로드하도록)
+      formData.append('image', new Blob(), 'undefined');
+    }
+    
     formData.append('frame_count', '113');
     formData.append('seed', '10');
 

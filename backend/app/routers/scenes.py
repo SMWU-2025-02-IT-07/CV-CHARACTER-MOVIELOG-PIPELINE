@@ -17,10 +17,17 @@ class SceneCompleteRequest(BaseModel):
 async def scene_complete(req: SceneCompleteRequest):
     """Receive scene completion notifications from the ML server."""
     try:
+        print(f"Received scene completion notification:")
+        print(f"  Scenario ID: {req.scenario_id}")
+        print(f"  Scene ID: {req.scene_id}")
+        print(f"  Video URL: {req.video_url}")
+        print(f"  Status: {req.status}")
+        
+        # 시나리오 메타데이터 업데이트
         update_scene_result(
             scenario_id=req.scenario_id,
             scene_id=req.scene_id,
-            video_url=req.video_url,
+            video_url=req.video_url
         )
 
         print(f"Scene {req.scene_id} completed for scenario {req.scenario_id}")
@@ -28,4 +35,6 @@ async def scene_complete(req: SceneCompleteRequest):
         return {"status": "success", "message": "Scene metadata updated"}
     except Exception as e:
         print(f"Failed to update scene metadata: {e}")
+        import traceback
+        print(traceback.format_exc())
         return {"status": "error", "message": str(e)}

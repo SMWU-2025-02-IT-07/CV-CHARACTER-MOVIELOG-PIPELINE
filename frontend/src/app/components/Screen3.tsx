@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { AIService } from "@/services/ai.service";
 import { Button } from "@/app/components/ui/button";
+import { SafeVideoPlayer } from "@/app/components/SafeVideoPlayer";
 import type { SceneUiStatus } from "@/types/job";
 import { useNavigate } from "react-router-dom";
 
@@ -204,7 +205,16 @@ export function Screen3() {
                   position: 'relative',
                 }}>
                   {scene.videoUrl ? (
-                    <video src={scene.videoUrl} className="w-full h-full" style={{ objectFit: 'cover' }} controls muted loop />
+                    <SafeVideoPlayer
+                      src={scene.videoUrl}
+                      className="w-full h-full"
+                      style={{ borderRadius: 'calc(var(--radius) - 2px)' }}
+                      onError={(error) => {
+                        console.error(`Video error for scene ${scene.id}:`, error);
+                        // 에러 시 상태를 error로 변경
+                        setSceneStatuses(prev => ({ ...prev, [scene.id]: 'error' }));
+                      }}
+                    />
                   ) : (
                     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                       {status === 'generating' ? (

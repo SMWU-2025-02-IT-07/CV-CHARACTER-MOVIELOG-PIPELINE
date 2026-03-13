@@ -7,7 +7,6 @@ import os
 import json
 from pathlib import Path
 import threading
-from video_monitor import start_video_monitor
 
 app = FastAPI()
 
@@ -25,13 +24,6 @@ app.add_middleware(
 )
 uploader = S3Uploader()
 
-# 백그라운드에서 비디오 모니터링 시작
-def start_monitoring():
-    start_video_monitor()
-
-monitor_thread = threading.Thread(target=start_monitoring, daemon=True)
-monitor_thread.start()
-
 COMFYUI_URL = "http://localhost:8188"
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://43.202.58.164:8000')
 
@@ -47,11 +39,31 @@ async def generate(
     # 이미지를 ComfyUI input 폴더에 저장
     comfy_input_dir = Path("./ComfyUI/input")
     comfy_input_dir.mkdir(exist_ok=True)
-    image_filename = f"{scenario_id}_scene_{scene_id}_{image.filename}"
-    image_path = comfy_input_dir / image_filename
     
-    with open(image_path, "wb") as f:
-        f.write(await image.read())
+    # 미리보기 이미지가 있으면 사용, 없으면 업로드된 이미지 사용
+    if image.filename and image.filename != "undefined":
+        # 직접 업로드된 이미지 (캐릭터 원본 또는 미리보기)
+        image_filename = f"{scenario_id}_scene_{scene_id}_{image.filename}"
+        image_path = comfy_input_dir / image_filename
+        
+        with open(image_path, "wb") as f:
+            f.write(await image.read())
+    else:
+        # S3에서 미리보기 이미지 다운로드
+        try:
+            import boto3
+            s3 = boto3.client('s3')
+            bucket = os.getenv('S3_BUCKET_NAME', 'cv-character-movielog-pipeline')
+            s3_key = f"preview/{scenario_id}/scene_{scene_id}.png"
+            
+            image_filename = f"{scenario_id}_scene_{scene_id}_preview.png"
+            image_path = comfy_input_dir / image_filename
+            
+            s3.download_file(bucket, s3_key, str(image_path))
+            print(f"Downloaded preview image from S3: {s3_key}")
+        except Exception as e:
+            print(f"Failed to download preview image: {e}")
+            return {"error": "Preview image not found. Please generate preview first."}
     
     print(f"Image saved to: {image_path}")
     print(f"Scenario: {scenario_id}, Scene: {scene_id}")
@@ -341,3 +353,211 @@ async def status_legacy(prompt_id: str):
         return {"status": "completed", "outputs": output_files}
     
     return {"status": "processing"}
+@app.post("/generate-image/{scenario_id}/{scene_id}")
+async def generate_image(
+    scenario_id: str,
+    scene_id: int,
+    prompt: str = Form(...),
+    image: UploadFile = File(...),
+    seed: int = Form(42)
+):
+    """씬 미리보기 이미지 생성 (Flux.2 Klein 4B)"""
+    
+    # 이미지를 ComfyUI input 폴더에 저장
+    comfy_input_dir = Path("./ComfyUI/input")
+    comfy_input_dir.mkdir(exist_ok=True)
+    image_filename = f"{scenario_id}_scene_{scene_id}_preview_{image.filename}"
+    image_path = comfy_input_dir / image_filename
+    
+    with open(image_path, "wb") as f:
+        f.write(await image.read())
+    
+    # Flux.2 Klein 4B 워크플로우 구성
+    workflow = {
+        "76": {
+            "inputs": {
+                "image": image_filename
+            },
+            "class_type": "LoadImage"
+        },
+        "75:70": {
+            "inputs": {
+                "unet_name": "flux-2-klein-base-4b-fp8.safetensors",
+                "weight_dtype": "default"
+            },
+            "class_type": "UNETLoader"
+        },
+        "75:71": {
+            "inputs": {
+                "clip_name": "qwen_3_4b.safetensors",
+                "type": "flux2",
+                "device": "default"
+            },
+            "class_type": "CLIPLoader"
+        },
+        "75:72": {
+            "inputs": {
+                "vae_name": "flux2-vae.safetensors"
+            },
+            "class_type": "VAELoader"
+        },
+        "75:74": {
+            "inputs": {
+                "text": prompt,
+                "clip": ["75:71", 0]
+            },
+            "class_type": "CLIPTextEncode"
+        },
+        "75:67": {
+            "inputs": {
+                "text": "",
+                "clip": ["75:71", 0]
+            },
+            "class_type": "CLIPTextEncode"
+        },
+        "75:80": {
+            "inputs": {
+                "upscale_method": "nearest-exact",
+                "megapixels": 1,
+                "resolution_steps": 1,
+                "image": ["76", 0]
+            },
+            "class_type": "ImageScaleToTotalPixels"
+        },
+        "75:81": {
+            "inputs": {
+                "image": ["75:80", 0]
+            },
+            "class_type": "GetImageSize"
+        },
+        "75:79:78": {
+            "inputs": {
+                "pixels": ["75:80", 0],
+                "vae": ["75:72", 0]
+            },
+            "class_type": "VAEEncode"
+        },
+        "75:66": {
+            "inputs": {
+                "width": ["75:81", 0],
+                "height": ["75:81", 1],
+                "batch_size": 1
+            },
+            "class_type": "EmptyFlux2LatentImage"
+        },
+        "75:79:77": {
+            "inputs": {
+                "conditioning": ["75:74", 0],
+                "latent": ["75:79:78", 0]
+            },
+            "class_type": "ReferenceLatent"
+        },
+        "75:79:76": {
+            "inputs": {
+                "conditioning": ["75:67", 0],
+                "latent": ["75:79:78", 0]
+            },
+            "class_type": "ReferenceLatent"
+        },
+        "75:73": {
+            "inputs": {
+                "noise_seed": seed
+            },
+            "class_type": "RandomNoise"
+        },
+        "75:61": {
+            "inputs": {
+                "sampler_name": "euler"
+            },
+            "class_type": "KSamplerSelect"
+        },
+        "75:62": {
+            "inputs": {
+                "steps": 20,
+                "width": ["75:81", 0],
+                "height": ["75:81", 1]
+            },
+            "class_type": "Flux2Scheduler"
+        },
+        "75:63": {
+            "inputs": {
+                "cfg": 5,
+                "model": ["75:70", 0],
+                "positive": ["75:79:77", 0],
+                "negative": ["75:79:76", 0]
+            },
+            "class_type": "CFGGuider"
+        },
+        "75:64": {
+            "inputs": {
+                "noise": ["75:73", 0],
+                "guider": ["75:63", 0],
+                "sampler": ["75:61", 0],
+                "sigmas": ["75:62", 0],
+                "latent_image": ["75:66", 0]
+            },
+            "class_type": "SamplerCustomAdvanced"
+        },
+        "75:65": {
+            "inputs": {
+                "samples": ["75:64", 0],
+                "vae": ["75:72", 0]
+            },
+            "class_type": "VAEDecode"
+        },
+        "9": {
+            "inputs": {
+                "filename_prefix": f"preview/{scenario_id}/scene_{scene_id}",
+                "images": ["75:65", 0]
+            },
+            "class_type": "SaveImage"
+        }
+    }
+    
+    # ComfyUI 실행
+    response = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow})
+    
+    if response.status_code != 200:
+        return {"error": f"ComfyUI error: {response.text}"}
+    
+    prompt_id = response.json()["prompt_id"]
+    
+    return {
+        "prompt_id": prompt_id,
+        "status": "processing", 
+        "scenario_id": scenario_id,
+        "scene_id": scene_id,
+        "type": "image"
+    }
+
+@app.get("/image-status/{scenario_id}/{scene_id}/{prompt_id}")
+async def image_status(scenario_id: str, scene_id: int, prompt_id: str):
+    """이미지 생성 상태 확인"""
+    response = requests.get(f"{COMFYUI_URL}/history/{prompt_id}")
+    history = response.json()
+    
+    if prompt_id in history and history[prompt_id].get("outputs"):
+        # 완료되면 S3 업로드
+        output_files = []
+        for node_output in history[prompt_id]["outputs"].values():
+            if "images" in node_output:
+                for img in node_output["images"]:
+                    # 로컬 파일 경로
+                    if img.get("subfolder"):
+                        local_path = f"./ComfyUI/output/{img['subfolder']}/{img['filename']}"
+                    else:
+                        local_path = f"./ComfyUI/output/{img['filename']}"
+                    
+                    try:
+                        # S3 업로드 (미리보기 이미지)
+                        s3_key = f"preview/{scenario_id}/scene_{scene_id}.png"
+                        s3_url = uploader.upload_file_with_key(local_path, s3_key)
+                        output_files.append(s3_url)
+                        print(f"Preview image uploaded: {s3_url}")
+                        
+                    except Exception as e:
+                        print(f"Failed to upload preview image {local_path}: {e}")
+        
+        return {"status": "completed", "outputs": output_files, "type": "image"}
+    
+    return {"status": "processing", "type": "image"}

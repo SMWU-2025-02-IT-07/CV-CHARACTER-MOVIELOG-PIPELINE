@@ -23,7 +23,7 @@ class CreateScenarioRequest(BaseModel):
     skip_character_analysis: bool = False  # Sonnet 캐릭터 분석 스킵 옵션
 
 class SceneOut(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")  # forbid에서 ignore로 변경
     id: int
     title: str
     description: str

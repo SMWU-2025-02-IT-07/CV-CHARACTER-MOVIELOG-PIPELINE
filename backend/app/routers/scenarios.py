@@ -8,18 +8,11 @@ from app.schemas.scenario import (
     RegenerateScenarioResponse,
 )
 
-from app.schemas.library import LibraryScenarioSummary, LibraryScenarioDetail
-
 from app.services.scenario_service import (
     create_scenario,
     get_scenario,
     list_scenarios,
     regenerate_scenario,
-)
-
-from app.services.scenario_library_service import (
-    list_scenarios,
-    load_scenario_metadata,
 )
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
@@ -76,42 +69,7 @@ def list_all(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    rows = list_scenarios(limit=limit, offset=offset)
-    result = []
-
-    for row in rows:
-        result.append(
-            LibraryScenarioSummary(
-                scenario_id=row["scenario_id"],
-                title=row.get("title", row.get("brief", "Untitled Scenario")),
-                created_at=row["created_at"],
-                updated_at=row.get("updated_at"),
-                status=row.get("status", "pending"),
-                thumbnail_url=row.get("thumbnail_url"),
-                final_video_url=row.get("final_video_url"),
-            )
-        )
-
-    return result
-
-
-@router.get("/{scenario_id}", response_model=LibraryScenarioDetail)
-def get_one(scenario_id: str):
-    row = load_scenario_metadata(scenario_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Scenario not found")
-
-    return LibraryScenarioDetail(
-        scenario_id=row["scenario_id"],
-        title=row.get("title", row.get("brief", "Untitled Scenario")),
-        brief=row.get("brief", ""),
-        created_at=row["created_at"],
-        updated_at=row.get("updated_at"),
-        status=row.get("status", "pending"),
-        thumbnail_url=row.get("thumbnail_url"),
-        final_video_url=row.get("final_video_url"),
-        scenes=row.get("scenes", []),
-    )
+    return list_scenarios(limit=limit, offset=offset)
 
 
 @router.post("/{scenario_id}/regenerate", response_model=RegenerateScenarioResponse)
@@ -198,6 +156,7 @@ def get_preview_status(scenario_id: str, scene_id: int, prompt_id: str):
     try:
         import requests
         import os
+        from app.services.scenario_service import update_scene_image_url
         
         ml_server_url = os.getenv('ML_SERVER_URL', 'http://16.184.61.191:8000')
         
@@ -207,10 +166,36 @@ def get_preview_status(scenario_id: str, scene_id: int, prompt_id: str):
         )
         
         if response.status_code == 200:
-            return response.json()
+            result = response.json()
+            print(f"ML server response: {result}")
+            
+            # 이미지 생성이 완료되면 image_url 업데이트
+            if result.get("status") == "completed":
+                # outputs 배열에서 첫 번째 URL 가져오기
+                image_url = None
+                if "outputs" in result and len(result["outputs"]) > 0:
+                    image_url = result["outputs"][0]
+                elif "image_url" in result:
+                    image_url = result["image_url"]
+                
+                if image_url:
+                    try:
+                        print(f"Preview completed for scene {scene_id}, updating image_url: {image_url}")
+                        update_scene_image_url(scenario_id, scene_id, image_url)
+                        print(f"Scene {scene_id} image_url updated successfully")
+                    except Exception as e:
+                        print(f"Failed to update scene {scene_id} image_url: {e}")
+                        import traceback
+                        print(traceback.format_exc())
+                else:
+                    print(f"Warning: No image URL found in completed response")
+            
+            return result
         else:
             raise HTTPException(status_code=500, detail="Status check failed")
             
     except Exception as e:
         print(f"Error checking preview status: {e}")
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

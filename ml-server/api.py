@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from s3_uploader import S3Uploader
 import requests
@@ -7,6 +7,7 @@ import os
 import json
 from pathlib import Path
 import threading
+from video_merge_service import merge_scenario_videos, get_merge_status
 
 app = FastAPI()
 
@@ -24,7 +25,7 @@ app.add_middleware(
 )
 uploader = S3Uploader()
 
-COMFYUI_URL = "http://localhost:8188"
+COMFYUI_URL = os.getenv('COMFYUI_URL', 'http://localhost:8188')
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://43.202.58.164:8000')
 
 @app.post("/generate/{scenario_id}/{scene_id}")
@@ -49,21 +50,31 @@ async def generate(
         with open(image_path, "wb") as f:
             f.write(await image.read())
     else:
-        # S3에서 미리보기 이미지 다운로드
+        # S3에서 씬별 생성된 이미지 다운로드 (핵심 변경!)
         try:
             import boto3
             s3 = boto3.client('s3')
             bucket = os.getenv('S3_BUCKET_NAME', 'cv-character-movielog-pipeline')
+            # 씬별 생성된 이미지 사용!
             s3_key = f"preview/{scenario_id}/scene_{scene_id}.png"
             
             image_filename = f"{scenario_id}_scene_{scene_id}_preview.png"
             image_path = comfy_input_dir / image_filename
             
             s3.download_file(bucket, s3_key, str(image_path))
-            print(f"Downloaded preview image from S3: {s3_key}")
+            print(f"Downloaded scene-specific image from S3: {s3_key}")
         except Exception as e:
-            print(f"Failed to download preview image: {e}")
-            return {"error": "Preview image not found. Please generate preview first."}
+            print(f"Failed to download scene image: {e}")
+            # 씬별 이미지가 없으면 원본 캐릭터 이미지로 fallback
+            try:
+                s3_key_fallback = f"characters/{scenario_id}/input.png"
+                image_filename = f"{scenario_id}_character_fallback.png"
+                image_path = comfy_input_dir / image_filename
+                s3.download_file(bucket, s3_key_fallback, str(image_path))
+                print(f"Using fallback character image: {s3_key_fallback}")
+            except Exception as e2:
+                print(f"Failed to download fallback image: {e2}")
+                return {"error": "Neither scene image nor character image found. Please generate preview first."}
     
     print(f"Image saved to: {image_path}")
     print(f"Scenario: {scenario_id}, Scene: {scene_id}")
@@ -561,3 +572,25 @@ async def image_status(scenario_id: str, scene_id: int, prompt_id: str):
         return {"status": "completed", "outputs": output_files, "type": "image"}
     
     return {"status": "processing", "type": "image"}
+
+
+@app.post("/merge-videos/{scenario_id}")
+async def merge_videos(scenario_id: str, background_tasks: BackgroundTasks):
+    """비디오 병합 시작 (백그라운드)"""
+    print(f"\n=== 비디오 병합 요청: {scenario_id} ===")
+    
+    # 백그라운드에서 병합 실행
+    background_tasks.add_task(merge_scenario_videos, scenario_id)
+    
+    return {
+        "status": "accepted",
+        "message": "비디오 병합이 시작되었습니다",
+        "scenario_id": scenario_id
+    }
+
+
+@app.get("/merge-status/{scenario_id}")
+async def merge_status_endpoint(scenario_id: str):
+    """비디오 병합 상태 확인"""
+    status = get_merge_status(scenario_id)
+    return status

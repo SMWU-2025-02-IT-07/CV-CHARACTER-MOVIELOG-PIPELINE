@@ -15,7 +15,11 @@ function ShellRoute({ children }: { children: ReactNode }) {
 }
 
 function RequireScenario({ children }: { children: ReactNode }) {
-  const { scenarioId, scenes } = useAppContext();
+  const { hydrated, scenarioId, scenes } = useAppContext();
+
+  if (!hydrated) {
+    return null;
+  }
 
   if (!scenarioId || scenes.length === 0) {
     return <Navigate to="/create" replace />;
@@ -25,7 +29,11 @@ function RequireScenario({ children }: { children: ReactNode }) {
 }
 
 function RequireResult({ children }: { children: ReactNode }) {
-  const { finalVideoUrl, scenarioId, scenes } = useAppContext();
+  const { hydrated, finalVideoUrl, scenarioId, scenes } = useAppContext();
+
+  if (!hydrated) {
+    return null;
+  }
 
   if (finalVideoUrl) {
     return <>{children}</>;

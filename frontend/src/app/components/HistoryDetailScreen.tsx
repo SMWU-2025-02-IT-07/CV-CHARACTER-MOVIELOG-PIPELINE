@@ -43,6 +43,24 @@ export function HistoryDetailScreen() {
     return d.toLocaleString("ko-KR");
   };
 
+  const sceneCount = data?.scenes.length ?? 0;
+  const imageReadyCount = data?.scenes.filter((scene) => !!scene.image_url).length ?? 0;
+  const videoReadyCount = data?.scenes.filter((scene) => !!scene.video_url).length ?? 0;
+  const nextStep = !data
+    ? null
+    : imageReadyCount < sceneCount
+      ? "scenario"
+      : videoReadyCount < sceneCount
+        ? "render"
+        : "result";
+  const progressLabel = !data
+    ? ""
+    : nextStep === "scenario"
+      ? `시나리오 단계 · 이미지 ${imageReadyCount}/${sceneCount}`
+      : nextStep === "render"
+        ? `영상 단계 · 영상 ${videoReadyCount}/${sceneCount}`
+        : "완료";
+
   const canContinueWork = !!data && !data.final_video_url;
 
   const handleContinueWork = () => {
@@ -64,7 +82,7 @@ export function HistoryDetailScreen() {
       ...characterData,
       imageUrl: characterData.imageUrl || data.thumbnail_url || "",
     });
-    navigate("/render");
+    navigate(nextStep === "scenario" ? "/scenario" : "/render");
   };
 
   if (isLoading) {
@@ -116,20 +134,36 @@ export function HistoryDetailScreen() {
         </button>
 
         {canContinueWork && (
-          <button
-            className="btn-cinema-primary"
-            onClick={handleContinueWork}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 14px",
-              height: "auto",
-            }}
-          >
-            <Play size={14} />
-            작업 이어하기
-          </button>
+          <>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "8px 12px",
+                borderRadius: "var(--radius)",
+                background: "rgba(124,58,237,0.08)",
+                border: "1px solid rgba(124,58,237,0.18)",
+                color: "var(--text-secondary)",
+                fontSize: "0.82rem",
+              }}
+            >
+              {progressLabel}
+            </div>
+            <button
+              className="btn-cinema-primary"
+              onClick={handleContinueWork}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 14px",
+                height: "auto",
+              }}
+            >
+              <Play size={14} />
+              작업 이어하기
+            </button>
+          </>
         )}
       </div>
 

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Play, Film, Clock3 } from "lucide-react";
 import { AIService } from "@/services/ai.service";
 import type { LibraryScenarioDetail } from "@/services/ai.service";
+import { useAppContext } from "@/context/AppContext";
 
 export function HistoryDetailScreen() {
   const navigate = useNavigate();
   const { scenarioId } = useParams();
+  const { characterData, setCharacterData, setScenarioId, setScenes, setFinalVideoUrl } = useAppContext();
   const [data, setData] = useState<LibraryScenarioDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -41,6 +43,30 @@ export function HistoryDetailScreen() {
     return d.toLocaleString("ko-KR");
   };
 
+  const canContinueWork = !!data && !data.final_video_url;
+
+  const handleContinueWork = () => {
+    if (!data) return;
+
+    setScenarioId(data.scenario_id);
+    setScenes(
+      data.scenes.map((scene) => ({
+        id: scene.id,
+        title: scene.title,
+        description: scene.description,
+        duration: scene.duration,
+        imageUrl: scene.image_url,
+        videoUrl: scene.video_url,
+      }))
+    );
+    setFinalVideoUrl("");
+    setCharacterData({
+      ...characterData,
+      imageUrl: characterData.imageUrl || data.thumbnail_url || "",
+    });
+    navigate("/render");
+  };
+
   if (isLoading) {
     return (
       <div className="w-full max-w-5xl mx-auto px-4 py-6 relative z-10">
@@ -70,7 +96,7 @@ export function HistoryDetailScreen() {
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 py-6 relative z-10">
-      <div style={{ marginBottom: "1rem" }}>
+      <div style={{ marginBottom: "1rem", display: "flex", gap: "8px", flexWrap: "wrap" }}>
         <button
           onClick={() => navigate("/history")}
           style={{
@@ -88,6 +114,23 @@ export function HistoryDetailScreen() {
           <ArrowLeft size={15} />
           목록으로
         </button>
+
+        {canContinueWork && (
+          <button
+            className="btn-cinema-primary"
+            onClick={handleContinueWork}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 14px",
+              height: "auto",
+            }}
+          >
+            <Play size={14} />
+            작업 이어하기
+          </button>
+        )}
       </div>
 
       <div className="fade-up fade-up-1" style={{ marginBottom: "1.5rem" }}>

@@ -19,7 +19,9 @@ export function Screen3() {
 
   useEffect(() => {
     const initialStatuses: Record<number, SceneUiStatus> = {};
-    scenes.forEach(scene => { initialStatuses[scene.id] = 'pending'; });
+    scenes.forEach(scene => {
+      initialStatuses[scene.id] = scene.videoUrl ? 'completed' : 'pending';
+    });
     setSceneStatuses(initialStatuses);
     generateAllScenes();
   }, []);
@@ -41,6 +43,10 @@ export function Screen3() {
     const updatedScenes = [...scenes];
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
+      if (scene.videoUrl) {
+        setSceneStatuses(prev => ({ ...prev, [scene.id]: 'completed' }));
+        continue;
+      }
       setSceneStatuses(prev => ({ ...prev, [scene.id]: 'generating' }));
       try {
         const videoUrl = await renderSceneVideo(scene.id);

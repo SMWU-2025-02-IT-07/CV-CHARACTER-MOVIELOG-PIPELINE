@@ -698,3 +698,11 @@ input::placeholder, textarea::placeholder {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.4), transparent);
 }
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}

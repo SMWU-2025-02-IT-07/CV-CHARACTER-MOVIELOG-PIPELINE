@@ -205,7 +205,7 @@ function HeroSection({  onStart,  onOpenHistory,}:
         <div style={{ maxWidth: 680 }}>
           <div className="eyebrow" style={{ marginBottom: "1.5rem", animation: "fadeUp 0.7s 0.1s both" }}>AI Video Generation Platform</div>
 
-          <h1 className="font-display" style={{ fontSize: "clamp(2.6rem, 6vw, 5rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.03em", marginBottom: "1.5rem", animation: "fadeUp 0.7s 0.2s both" }}>
+          <h1 className="font-display" style={{ fontSize: "clamp(2.6rem, 6vw, 5rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", marginBottom: "1.5rem", animation: "fadeUp 0.7s 0.2s both" }}>
             캐릭터를 입력하면<br />
             <span className="gradient-text">AI가 영상을</span><br />
             만들어드립니다
@@ -242,12 +242,12 @@ function HeroSection({  onStart,  onOpenHistory,}:
 
           {/* Stats strip */}
           <div style={{ display: "flex", gap: "2rem", marginTop: "3rem", animation: "fadeUp 0.7s 0.5s both" }}>
-            {[["10s", "생성 소요시간"], ["1080p", "출력 해상도"], ["3-Scene", "자동 구성"]].map(([val, label]) => (
+            {/* {[["1080p", "출력 해상도"], ["3-Scene", "자동 구성"]].map(([val, label]) => (
               <div key={label}>
                 <div className="font-display" style={{ fontSize: "1.4rem", fontWeight: 700, color: "#c4b5fd" }}>{val}</div>
                 <div className="font-mono" style={{ fontSize: "0.8rem", color: "#44445a", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 3 }}>{label}</div>
               </div>
-            ))}
+            ))} */}
           </div>
         </div>
       </div>
@@ -276,9 +276,6 @@ function HeroSection({  onStart,  onOpenHistory,}:
 function MarqueeSection() {
   return (
     <section style={{ padding: "6rem 0", borderTop: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)", overflow: "hidden", position: "relative" }}>
-      <p className="font-mono" style={{ textAlign: "center", fontSize: "0.62rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#44445a", marginBottom: "3rem" }}>
-        POWERED BY CUTTING-EDGE AI TECHNOLOGY
-      </p>
       <div style={{ display: "flex", overflow: "hidden", maskImage: "linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%)" }}>
         <div style={{ display: "flex", gap: "4rem", animation: "marquee 50s linear infinite", whiteSpace: "nowrap", flexShrink: 0 }}>
           {MARQUEE_ITEMS.map((item, i) => (
@@ -456,14 +453,16 @@ function FAQSection() {
   );
 }
 
-function Footer({  onStart,  onOpenHistory,}: {
+function Footer({  onStart,  onOpenHistory, onHome }: {
   onStart: () => void;
-  onOpenHistory: () => void;}) {  
+  onOpenHistory: () => void;
+  onHome: () => void;
+}) {  
     return (
     <footer style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "3rem 2rem" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1.5rem" }}>
         <div>
-          <div className="font-display" style={{ fontSize: "1.1rem", fontWeight: 800, background: "linear-gradient(135deg, #c4b5fd, #93c5fd)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AI VIDEO</div>
+          <div className="font-display" style={{ fontSize: "1.1rem", fontWeight: 800, background: "linear-gradient(135deg, #c4b5fd, #93c5fd)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>GEN SCENE</div>
           <div className="font-mono" style={{ fontSize: "0.6rem", color: "#44445a", letterSpacing: "0.12em", marginTop: 4, textTransform: "uppercase" }}>Generation Platform</div>
         </div>
         <div style={{ display: "flex", gap: "1.5rem" }}>
@@ -477,12 +476,9 @@ function Footer({  onStart,  onOpenHistory,}: {
         <button className="btn-outline" onClick={onStart} style={{ padding: "0 1.25rem", height: 38, fontSize: "0.8rem" }}>
           시작하기  →
         </button>
-        <button
-          className="btn-outline"
-          onClick={onOpenHistory}
-          style={{ padding: "0 1.25rem", height: 38, fontSize: "0.8rem" }}>
+        <button className="btn-outline" onClick={onOpenHistory} style={{ padding: "0 1.25rem", height: 38, fontSize: "0.8rem" }}>
             내 영상 보기
-          </button>
+        </button>
       </div>
       <div style={{ maxWidth: 1100, margin: "1.5rem auto 0", borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: "1.5rem" }}>
         <p className="font-mono" style={{ fontSize: "0.58rem", color: "#2a2a3a", letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -496,6 +492,7 @@ function Footer({  onStart,  onOpenHistory,}: {
 /* ─── MAIN EXPORT ────────────────────────────────── */
 export default function Screen0() {
   const navigate = useNavigate();
+  const onHome = () => navigate("/");
   const onStart = () => navigate("/create");
   const onOpenHistory = () => navigate("/history");
   return (
@@ -505,9 +502,12 @@ export default function Screen0() {
 
       {/* Nav */}
       <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "1rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.04)", backdropFilter: "blur(20px)", background: "rgba(0,0,0,0.7)" }}>
-        <div className="font-display" style={{ fontSize: "1rem", fontWeight: 800, background: "linear-gradient(135deg, #c4b5fd, #93c5fd)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: "-0.01em" }}>
-          AI VIDEO GEN
-        </div>
+        <button onClick={onHome}>
+          <div className="font-display" style={{ fontSize: "1rem", fontWeight: 800, background: "linear-gradient(135deg, #c4b5fd, #93c5fd)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: "-0.01em" }}>
+            GEN SCENE
+          </div>
+        </button>
+
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button className="btn-outline" onClick={onStart} style={{ padding: "0 1.1rem", height: 36, fontSize: "0.8rem" }}>
             시작하기  →
@@ -522,7 +522,7 @@ export default function Screen0() {
         <SpecTable />
         <CTASection onStart={onStart} />
         <FAQSection />
-        <Footer onStart={onStart} onOpenHistory={onOpenHistory} />
+        <Footer onStart={onStart} onOpenHistory={onOpenHistory} onHome={onHome} />
       </main>
     </>
   );

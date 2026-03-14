@@ -63,25 +63,7 @@ export function HistoryScreen() {
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 relative z-10">
       <div className="fade-up fade-up-1" style={{ marginBottom: "1.5rem" }}>
-                <button
-          onClick={() => navigate("/")}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 14px",
-            marginBottom: "1.5rem",
-            borderRadius: "var(--radius)",
-            background: "var(--bg-surface)",
-            border: "1px solid var(--glass-border)",
-            color: "var(--text-secondary)",
-            cursor: "pointer",
-            fontSize: "0.82rem",
-          }}
-        >
-          <Home size={14} />
-          돌아가기
-        </button>
+
         <div className="eyebrow" style={{ marginBottom: "0.75rem" }}>
           My Library
         </div>

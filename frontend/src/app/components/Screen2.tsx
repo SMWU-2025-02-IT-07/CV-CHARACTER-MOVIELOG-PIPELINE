@@ -490,7 +490,7 @@ export function Screen2() {
                           opacity: 0,
                           transition: "opacity 0.25s ease",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                        //onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
                         onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
                       >
                         <div

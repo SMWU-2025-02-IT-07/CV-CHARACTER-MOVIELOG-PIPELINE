@@ -35,6 +35,8 @@ class SceneOut(BaseModel):
 
 class CreateScenarioResponse(BaseModel):
     scenario_id: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     scenes: List[SceneOut]
 
 class SceneEditIn(BaseModel):
@@ -48,6 +50,8 @@ class RegenerateScenarioRequest(BaseModel):
 
 class RegenerateScenarioResponse(BaseModel):
     scenario_id: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     scenes: List[SceneOut]
 
 class SceneLLM(BaseModel):

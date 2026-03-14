@@ -1,10 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from uuid import uuid4
 from pathlib import Path
 from typing import Optional, List
 import boto3
+from datetime import datetime
 
 from app.core.config import settings
 from app.core.errors import AppError
@@ -76,6 +77,10 @@ def _normalize_scene_media(scene: dict) -> dict:
         print(f"_normalize_scene_media - Scene {scene.get('id', 'unknown')}: normalized image_url = {normalized.get('image_url', 'None')}")
     
     return normalized
+
+
+def _now_iso() -> str:
+    return datetime.now().astimezone().isoformat()
 
 def _build_regen_prompt(req: RegenerateScenarioRequest) -> str:
     sc = req.options.scene_count
@@ -267,8 +272,11 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
         )
         scenes_out.append(scene_out)
 
+    now = _now_iso()
     payload = {
         "scenario_id": scenario_id,
+        "created_at": now,
+        "updated_at": now,
         "request": req.model_dump(mode="json"),
         "scenes": [s.model_dump(mode="json") for s in scenes_out],
         "character_description": data.get("character_description", ""),  # 연속성을 위한 캐릭터 설명 저장
@@ -287,7 +295,12 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
     except Exception as e:
         raise AppError("STORAGE_ERROR", f"Failed to save scenario: {str(e)}", status_code=500)
 
-    return CreateScenarioResponse(scenario_id=scenario_id, scenes=scenes_out)
+    return CreateScenarioResponse(
+        scenario_id=scenario_id,
+        created_at=payload["created_at"],
+        updated_at=payload["updated_at"],
+        scenes=scenes_out,
+    )
 
 
 def get_scene_for_generation(scenario_id: str, scene_id: int) -> dict:
@@ -379,6 +392,8 @@ def update_scene_image_url(scenario_id: str, scene_id: int, image_url: str) -> N
             print(f"Scene {scene_id} not found in scenario {scenario_id}")
             raise AppError("NOT_FOUND", f"Scene {scene_id} not found", status_code=404)
         
+        payload["updated_at"] = _now_iso()
+
         # 파일 저장
         print(f"Saving updated scenario to: {p}")
         p.write_text(
@@ -450,6 +465,8 @@ def update_scene_result(scenario_id: str, scene_id: int, video_url: str, last_fr
             print(f"Scene {scene_id} not found in scenario {scenario_id}")
             raise AppError("NOT_FOUND", f"Scene {scene_id} not found", status_code=404)
         
+        payload["updated_at"] = _now_iso()
+
         # 파일 저장
         print(f"Saving updated scenario to: {p}")
         p.write_text(
@@ -489,7 +506,12 @@ def get_scenario(scenario_id: str) -> CreateScenarioResponse:
             payload = json.loads(p.read_text(encoding="utf-8"))
             scenes = [_normalize_scene_media(_normalize_scene_duration(s)) for s in payload["scenes"]]
             return CreateScenarioResponse.model_validate(
-                {"scenario_id": payload["scenario_id"], "scenes": scenes}
+                {
+                    "scenario_id": payload["scenario_id"],
+                    "created_at": payload.get("created_at"),
+                    "updated_at": payload.get("updated_at"),
+                    "scenes": scenes,
+                }
             )
         except Exception as e:
             print(f"Failed to load local scenario file: {e}")
@@ -562,7 +584,12 @@ def get_scenario(scenario_id: str) -> CreateScenarioResponse:
         print(f"정규화된 씬 데이터 (첫 번째 씬): {scenes[0] if scenes else 'No scenes'}")
         
         return CreateScenarioResponse.model_validate(
-            {"scenario_id": payload["scenario_id"], "scenes": scenes}
+            {
+                "scenario_id": payload["scenario_id"],
+                "created_at": payload.get("created_at"),
+                "updated_at": payload.get("updated_at"),
+                "scenes": scenes,
+            }
         )
         
     except Exception as e:
@@ -582,7 +609,12 @@ def list_scenarios(limit: int = 20, offset: int = 0) -> list[CreateScenarioRespo
             scenes = [_normalize_scene_media(_normalize_scene_duration(s)) for s in payload["scenes"]]
             items.append(
                 CreateScenarioResponse.model_validate(
-                    {"scenario_id": payload["scenario_id"], "scenes": scenes}
+                    {
+                        "scenario_id": payload["scenario_id"],
+                        "created_at": payload.get("created_at"),
+                        "updated_at": payload.get("updated_at"),
+                        "scenes": scenes,
+                    }
                 )
             )
         except Exception:
@@ -608,8 +640,20 @@ def regenerate_scenario(scenario_id: str, req: RegenerateScenarioRequest) -> Reg
         )
         for s in data["scenes"]
     ]
+    existing_created_at = None
+    scenario_path = _scenario_path(scenario_id)
+    if scenario_path.exists():
+        try:
+            existing_payload = json.loads(scenario_path.read_text(encoding="utf-8"))
+            existing_created_at = existing_payload.get("created_at")
+        except Exception:
+            existing_created_at = None
+
+    now = _now_iso()
     payload = {
         "scenario_id": scenario_id,
+        "created_at": existing_created_at or now,
+        "updated_at": now,
         "request": req.model_dump(mode="json"),
         "scenes": [s.model_dump(mode="json") for s in scenes_out],
     }
@@ -622,4 +666,9 @@ def regenerate_scenario(scenario_id: str, req: RegenerateScenarioRequest) -> Reg
     except Exception as e:
         raise AppError("STORAGE_ERROR", f"Failed to save scenario: {str(e)}", status_code=500)
 
-    return RegenerateScenarioResponse(scenario_id=scenario_id, scenes=scenes_out)
+    return RegenerateScenarioResponse(
+        scenario_id=scenario_id,
+        created_at=payload["created_at"],
+        updated_at=payload["updated_at"],
+        scenes=scenes_out,
+    )

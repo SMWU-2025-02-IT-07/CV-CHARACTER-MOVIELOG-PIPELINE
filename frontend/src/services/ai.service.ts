@@ -390,6 +390,9 @@ export const AIService = {
       }
 
       const generateResult = await generateResponse.json();
+      if (!generateResult.prompt_id) {
+        throw new Error(generateResult.error || generateResult.detail || 'Preview generation did not return a prompt_id');
+      }
       const promptId = generateResult.prompt_id;
 
       // 2) 상태 폴링

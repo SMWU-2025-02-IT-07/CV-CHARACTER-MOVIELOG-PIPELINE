@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from s3_uploader import S3Uploader
 import requests
@@ -549,12 +549,18 @@ async def generate_image(
     }
     
     # ComfyUI 실행
-    response = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow})
-    
+    try:
+        response = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow}, timeout=30)
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"ComfyUI connection error: {str(e)}")
+
     if response.status_code != 200:
-        return {"error": f"ComfyUI error: {response.text}"}
-    
-    prompt_id = response.json()["prompt_id"]
+        raise HTTPException(status_code=502, detail=f"ComfyUI error: {response.text}")
+
+    result = response.json()
+    prompt_id = result.get("prompt_id")
+    if not prompt_id:
+        raise HTTPException(status_code=502, detail="No prompt_id returned from ComfyUI")
     
     return {
         "prompt_id": prompt_id,

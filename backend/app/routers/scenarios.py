@@ -136,11 +136,16 @@ def generate_scene_preview(scenario_id: str, scene_id: int):
         
         if response.status_code == 200:
             result = response.json()
+            if not result.get("prompt_id"):
+                error_message = result.get("error") or "Preview generation failed"
+                print(f"ml-server returned invalid preview response: {result}")
+                raise HTTPException(status_code=502, detail=error_message)
+
             print(f"Preview generation started: {result}")
             return result
-        else:
-            print(f"ml-server error: {response.status_code} - {response.text}")
-            raise HTTPException(status_code=500, detail="Preview generation failed")
+
+        print(f"ml-server error: {response.status_code} - {response.text}")
+        raise HTTPException(status_code=502, detail="Preview generation failed")
             
     except HTTPException:
         raise

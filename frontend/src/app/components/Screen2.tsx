@@ -463,7 +463,7 @@ export function Screen2() {
                     position: "relative",
                   }}
                 >
-                  {scene.imageUrl ? (
+                  {previewStatuses[scene.id] !== 'generating' && scene.imageUrl ? (
                     <>
                       <img
                         src={scene.imageUrl}

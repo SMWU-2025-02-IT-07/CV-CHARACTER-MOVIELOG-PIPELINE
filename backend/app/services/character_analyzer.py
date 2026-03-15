@@ -125,19 +125,19 @@ def _mock_character_and_scenes(req: CreateScenarioRequest) -> dict:
         },
     ]
 
-        # mock도 동일 스키마 검증
-        result = {
-            "character_description": character_description,
-            "scenes": [
-                {
-                    **scene,
-                    "narration_text": scene["scenario_ko"]  # mock에서는 scenario_ko를 narration으로 사용
-                }
-                for scene in scene_templates
-            ],
-        }
-        ScenesLLM.model_validate(result)
-        return result
+    # mock도 동일 스키마 검증
+    result = {
+        "character_description": character_description,
+        "scenes": [
+            {
+                **scene,
+                "narration_text": scene["scenario_ko"]  # mock에서는 scenario_ko를 narration으로 사용
+            }
+            for scene in scene_templates
+        ],
+    }
+    ScenesLLM.model_validate(result)
+    return result
 
 
 def extract_character_description_and_scenes(image_base64: str, req: CreateScenarioRequest) -> dict:

@@ -565,32 +565,20 @@ export const AIService = {
   },
 
   /**
-   * TTS 음성 생성
+   * TTS 음성 생성 (S3에서 자동으로 narration_text 로드)
    */
   generateTTS: async (
     scenarioId: string,
-    text: string,
     options?: {
-      voiceDescription?: string;
-      language?: string;
-      seed?: number;
       onStatusChange?: (status: 'generating' | 'completed' | 'error') => void;
     }
   ): Promise<string> => {
     try {
       options?.onStatusChange?.('generating');
       
-      // 1) TTS 생성 요청
-      const generateResponse = await fetch(`${API_V1_BASE_URL}/tts/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scenario_id: scenarioId,
-          text: text,
-          voice_description: options?.voiceDescription,
-          language: options?.language || 'Korean',
-          seed: options?.seed
-        })
+      // 1) TTS 생성 요청 (scenario_id만 전송)
+      const generateResponse = await fetch(`${API_V1_BASE_URL}/tts/generate/${scenarioId}`, {
+        method: 'POST'
       });
 
       if (!generateResponse.ok) {

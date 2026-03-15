@@ -30,6 +30,7 @@ class SceneOut(BaseModel):
     duration: int
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
+    narration_text: Optional[str] = None  # TTS용 나레이션 텍스트
     image_url: Optional[str] = None
     video_url: Optional[str] = None
 
@@ -60,6 +61,7 @@ class SceneLLM(BaseModel):
     scenario_ko: str
     image_prompt_en: str
     video_prompt_en: str
+    narration_text: str  # TTS용 나레이션 텍스트 (한국어)
 
 class ScenesLLM(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -7,6 +7,7 @@ import os
 import json
 from pathlib import Path
 import threading
+from datetime import datetime
 from video_merge_service import merge_scenario_videos, get_merge_status
 
 app = FastAPI()
@@ -821,11 +822,40 @@ async def merge_video_audio_task(scenario_id: str):
         
         print(f"Final video uploaded: {final_url}")
         
-        # 5. 임시 파일 정리
+        # 5. S3 metadata.json 업데이트
+        try:
+            metadata_s3_key = f"scenarios/{scenario_id}/metadata.json"
+            metadata_local_path = os.path.join(temp_dir, "metadata.json")
+            
+            # metadata.json 다운로드
+            print(f"Downloading metadata: s3://{bucket}/{metadata_s3_key}")
+            s3.download_file(bucket, metadata_s3_key, metadata_local_path)
+            
+            # metadata 업데이트
+            with open(metadata_local_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            
+            metadata['final_video_url'] = final_url
+            metadata['updated_at'] = datetime.now().astimezone().isoformat()
+            
+            # metadata.json 저장
+            with open(metadata_local_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            
+            # S3에 업로드
+            print(f"Uploading updated metadata: s3://{bucket}/{metadata_s3_key}")
+            s3.upload_file(metadata_local_path, bucket, metadata_s3_key)
+            print(f"Metadata updated with final_video_url: {final_url}")
+            
+        except Exception as e:
+            print(f"Failed to update metadata.json: {e}")
+            # metadata 업데이트 실패해도 영상은 업로드됨
+        
+        # 6. 임시 파일 정리
         import shutil
         shutil.rmtree(temp_dir)
         
-        # 6. 상태 업데이트 (merge_status 딕셔너리 재사용)
+        # 7. 상태 업데이트 (merge_status 딕셔너리 재사용)
         from video_merge_service import merge_status
         merge_status[f"{scenario_id}_final"] = {
             "status": "completed",

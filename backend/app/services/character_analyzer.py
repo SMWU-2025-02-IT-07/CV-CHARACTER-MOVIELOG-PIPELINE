@@ -125,14 +125,19 @@ def _mock_character_and_scenes(req: CreateScenarioRequest) -> dict:
         },
     ]
 
-    result = {
-        "character_description": character_description,
-        "scenes": scene_templates,
-    }
-
-    # mock도 동일 스키마 검증
-    ScenesLLM.model_validate(result)
-    return result
+        # mock도 동일 스키마 검증
+        result = {
+            "character_description": character_description,
+            "scenes": [
+                {
+                    **scene,
+                    "narration_text": scene["scenario_ko"]  # mock에서는 scenario_ko를 narration으로 사용
+                }
+                for scene in scene_templates
+            ],
+        }
+        ScenesLLM.model_validate(result)
+        return result
 
 
 def extract_character_description_and_scenes(image_base64: str, req: CreateScenarioRequest) -> dict:
@@ -191,6 +196,12 @@ Art style: 3D animation"""
 
 Given a character description and a situation, generate exactly 3 connected scenes.
 
+IMPORTANT CONSTRAINTS:
+- Each scene is ONLY 4 SECONDS long - keep video prompts simple and focused
+- Total narration must be around 12 seconds (all 3 scenes combined)
+- Video prompts must describe ONE simple action per scene, not multiple actions
+- Narration must be in KOREAN and flow naturally when read aloud
+
 Rules:
 - Scenes must flow naturally as a continuous story
 - CHARACTER DESCRIPTION must be repeated verbatim at the start of every video_prompt_en
@@ -200,6 +211,7 @@ Rules:
 - Focus on subtle, peaceful movements rather than fast or dramatic actions
 - Use words like "gently", "slowly", "softly", "calmly" in video prompts
 - Avoid words like "energetically", "quickly", "dynamically", "vibrantly"
+- Keep video_prompt_en concise (2-3 sentences max) since each scene is only 4 seconds
 
 Output strict JSON only, no markdown, no explanation:
 {
@@ -207,24 +219,36 @@ Output strict JSON only, no markdown, no explanation:
   "scenes": [
     {
       "scene_number": 1,
-      "scenario_ko": "한국어 시나리오 2-3문장. 생동감 있게.",
+      "scenario_ko": "한국어 시나리오 1-2문장. 간결하게.",
       "image_prompt_en": "English image generation prompt for this scene, describing composition, lighting, and visual elements.",
-      "video_prompt_en": "{character_description} + gentle action, slow camera movement, peaceful environment, soft lighting, calm mood/style."
+      "video_prompt_en": "{character_description} + ONE simple gentle action, slow camera movement, peaceful environment. (2-3 sentences max for 4 second scene)",
+      "narration_text": "한국어 나레이션 텍스트. 자연스럽게 읽을 수 있는 1-2문장. 전체 3개 씬 합쳐서 12초 분량."
     },
     {
       "scene_number": 2,
       "scenario_ko": "...",
       "image_prompt_en": "...",
-      "video_prompt_en": "..."
+      "video_prompt_en": "...",
+      "narration_text": "..."
     },
     {
       "scene_number": 3,
       "scenario_ko": "...",
       "image_prompt_en": "...",
-      "video_prompt_en": "..."
+      "video_prompt_en": "...",
+      "narration_text": "..."
     }
   ]
-}"""
+}
+
+NARRATION GUIDELINES:
+- Write in natural spoken Korean
+- Each scene's narration should be 3-4 seconds when read aloud
+- Total of all 3 scenes should be around 12 seconds
+- Use present tense and descriptive language
+- Make it sound like a storybook narration
+- Example: "작은 고양이가 풀밭에 앉아 나비를 발견합니다. 호기심 가득한 눈으로 천천히 다가가요. 나비와 함께 즐겁게 놀다가 만족스럽게 쉬어갑니다."
+"""
         }
         
         response = bedrock.invoke_model(

@@ -64,12 +64,16 @@ def _normalize_scene_media(scene: dict) -> dict:
         normalized["image_url"] = None
 
     # Remove any extra fields that are not part of SceneOut model
-    allowed_fields = {"id", "title", "description", "duration", "image_prompt", "video_prompt", "image_url", "video_url"}
+    allowed_fields = {"id", "title", "description", "duration", "image_prompt", "video_prompt", "narration_text", "image_url", "video_url"}
     normalized = {k: v for k, v in normalized.items() if k in allowed_fields}
     
     # Ensure video_url is properly handled
     if "video_url" not in normalized:
         normalized["video_url"] = None
+    
+    # narration_text fallback
+    if "narration_text" not in normalized:
+        normalized["narration_text"] = normalized.get("description", "")
     
     # 디버깅: image_url 정규화 과정 확인
     if "image_url" in scene:
@@ -259,16 +263,15 @@ def create_scenario(req: CreateScenarioRequest) -> CreateScenarioResponse:
     for s in data["scenes"]:
         print(f"씬 {s['scene_number']} 생성 완료")
         
-        # 첫 번째 씬은 원본 캐릭터 이미지, 이후는 이전 씬의 last_frame 사용 예정
-        
         scene_out = SceneOut(
             id=s["scene_number"],
             title=f"씬 {s['scene_number']}",
             description=s["scenario_ko"],
             duration=4,
-            image_prompt=s.get("image_prompt_en", s["scenario_ko"]),  # 이미지 프롬프트 활용
+            image_prompt=s.get("image_prompt_en", s["scenario_ko"]),
             video_prompt=s["video_prompt_en"],
-            image_url=None,  # 생성 후 업데이트됨
+            narration_text=s.get("narration_text", s["scenario_ko"]),
+            image_url=None,
         )
         scenes_out.append(scene_out)
 
@@ -635,6 +638,7 @@ def regenerate_scenario(scenario_id: str, req: RegenerateScenarioRequest) -> Reg
             duration=s["duration"],
             image_prompt=s["image_prompt"],
             video_prompt=s["video_prompt"],
+            narration_text=s.get("narration_text", s["description"]),
             image_url=None,
             video_url=None,
         )

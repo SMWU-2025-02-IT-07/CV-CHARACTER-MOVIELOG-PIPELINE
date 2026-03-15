@@ -110,10 +110,8 @@ export function Screen4() {
     try {
       setTtsStatus('generating');
       
-      // 모든 씨 설명을 합쳐서 하나의 텍스트로 만들기
-      const narrationText = scenes.map(scene => scene.description).join(' ');
-      
-      const audioUrl = await AIService.generateTTS(scenarioId, narrationText, {
+      // scenario_id만 전송 (Backend가 S3에서 narration_text 로드)
+      const audioUrl = await AIService.generateTTS(scenarioId, {
         onStatusChange: (status) => {
           setTtsStatus(status);
         }

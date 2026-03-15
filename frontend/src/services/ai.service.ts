@@ -564,5 +564,120 @@ export const AIService = {
     return res.json();
   },
 
+  /**
+   * TTS 음성 생성
+   */
+  generateTTS: async (
+    scenarioId: string,
+    text: string,
+    options?: {
+      voiceDescription?: string;
+      language?: string;
+      seed?: number;
+      onStatusChange?: (status: 'generating' | 'completed' | 'error') => void;
+    }
+  ): Promise<string> => {
+    try {
+      options?.onStatusChange?.('generating');
+      
+      // 1) TTS 생성 요청
+      const generateResponse = await fetch(`${API_V1_BASE_URL}/tts/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenario_id: scenarioId,
+          text: text,
+          voice_description: options?.voiceDescription,
+          language: options?.language || 'Korean',
+          seed: options?.seed
+        })
+      });
+
+      if (!generateResponse.ok) {
+        throw new Error(`Failed to start TTS generation: ${generateResponse.statusText}`);
+      }
+
+      const generateResult = await generateResponse.json();
+      const promptId = generateResult.prompt_id;
+
+      // 2) 상태 폴링
+      while (true) {
+        await sleep(3000); // 3초 대기
+
+        const statusResponse = await fetch(`${API_V1_BASE_URL}/tts/status/${scenarioId}/${promptId}`);
+        if (!statusResponse.ok) {
+          throw new Error(`Failed to check TTS status: ${statusResponse.statusText}`);
+        }
+
+        const statusResult = await statusResponse.json();
+        
+        if (statusResult.status === 'completed') {
+          options?.onStatusChange?.('completed');
+          return statusResult.outputs[0] || '';
+        } else if (statusResult.status === 'failed') {
+          options?.onStatusChange?.('error');
+          throw new Error('TTS generation failed');
+        }
+        
+        options?.onStatusChange?.('generating');
+      }
+    } catch (error) {
+      options?.onStatusChange?.('error');
+      throw error;
+    }
+  },
+
+  /**
+   * 최종 영상+음성 병합
+   */
+  mergeFinalVideo: async (
+    scenarioId: string,
+    options?: {
+      onStatusChange?: (status: 'pending' | 'processing' | 'completed' | 'error', progress?: number) => void;
+    }
+  ): Promise<string> => {
+    try {
+      // 1) 최종 병합 시작
+      options?.onStatusChange?.('processing', 0);
+      
+      const mergeResponse = await fetch(`${API_V1_BASE_URL}/tts/merge-final/${scenarioId}`, {
+        method: 'POST'
+      });
+
+      if (!mergeResponse.ok) {
+        throw new Error(`Failed to start final merge: ${mergeResponse.statusText}`);
+      }
+
+      // 2) 상태 폴링
+      while (true) {
+        await sleep(2000); // 2초 대기
+
+        const statusResponse = await fetch(`${API_V1_BASE_URL}/tts/final-merge-status/${scenarioId}`);
+        if (!statusResponse.ok) {
+          throw new Error(`Failed to check final merge status: ${statusResponse.statusText}`);
+        }
+
+        const statusResult = await statusResponse.json();
+        
+        if (statusResult.progress !== undefined) {
+          options?.onStatusChange?.('processing', statusResult.progress);
+        }
+        
+        if (statusResult.status === 'completed') {
+          options?.onStatusChange?.('completed', 100);
+          return statusResult.final_video_url;
+        } else if (statusResult.status === 'error') {
+          options?.onStatusChange?.('error');
+          throw new Error(statusResult.message || 'Final merge failed');
+        }
+        
+        options?.onStatusChange?.('processing', statusResult.progress || 0);
+      }
+    } catch (error) {
+      options?.onStatusChange?.('error');
+      throw error;
+    }
+  },
+
 
 };

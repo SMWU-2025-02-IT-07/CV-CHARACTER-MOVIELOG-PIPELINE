@@ -19,6 +19,15 @@ except Exception as e:
     print(f"✗ Failed to load video merge router: {e}")
     VIDEO_MERGE_AVAILABLE = False
 
+# TTS router import
+try:
+    from app.routers.tts import router as tts_router
+    TTS_AVAILABLE = True
+    print("✓ TTS router loaded successfully")
+except Exception as e:
+    print(f"✗ Failed to load TTS router: {e}")
+    TTS_AVAILABLE = False
+
 app = FastAPI(title="CV Character Movielog Backend", version="0.1.0")
 
 # CORS 설정 (하나로 통합)
@@ -47,5 +56,11 @@ if VIDEO_MERGE_AVAILABLE:
     print("✓ Video merge endpoints registered at /api/v1/video-merge")
 else:
     print("✗ Video merge endpoints not available")
+
+if TTS_AVAILABLE:
+    app.include_router(tts_router, prefix="/api/v1")
+    print("✓ TTS endpoints registered at /api/v1/tts")
+else:
+    print("✗ TTS endpoints not available")
 
 register_exception_handlers(app)

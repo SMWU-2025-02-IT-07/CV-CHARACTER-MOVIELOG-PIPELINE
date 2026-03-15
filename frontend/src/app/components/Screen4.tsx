@@ -1,10 +1,11 @@
 // src/app/components/Screen4.tsx
 
-import { Play, Download, Share2, RefreshCw, Sparkles, Pause, SkipForward, SkipBack, CheckCircle } from "lucide-react";
+import { Play, Download, Share2, RefreshCw, Sparkles, Pause, SkipForward, SkipBack, CheckCircle, Mic } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { SafeVideoPlayer } from "@/app/components/SafeVideoPlayer";
 import { useNavigate } from "react-router-dom";
+import { AIService } from "@/services/ai.service";
 
 interface Playlist {
   videos: string[];
@@ -14,11 +15,20 @@ interface Playlist {
 
 export function Screen4() {
   const navigate = useNavigate();
-  const { finalVideoUrl, resetAll } = useAppContext();
+  const { finalVideoUrl, resetAll, scenarioId, scenes } = useAppContext();
   const [isPlaying, setIsPlaying] = useState(false);
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // TTS 상태
+  const [ttsStatus, setTtsStatus] = useState<'idle' | 'generating' | 'completed' | 'error'>('idle');
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string>('');
+  
+  // 최종 병합 상태
+  const [finalMergeStatus, setFinalMergeStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
+  const [finalMergeProgress, setFinalMergeProgress] = useState(0);
+  const [finalVideoWithAudioUrl, setFinalVideoWithAudioUrl] = useState<string>('');
 
   useEffect(() => {
     if (finalVideoUrl && finalVideoUrl.startsWith('playlist:')) {
@@ -68,7 +78,19 @@ export function Screen4() {
     }
   }, [currentVideoIndex, playlist]);
 
-  const handleDownload = () => alert('다운로드 기능은 AWS 배포 시 구현됩니다.');
+  const handleDownload = () => {
+    const downloadUrl = finalVideoWithAudioUrl || finalVideoUrl;
+    if (downloadUrl) {
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `video_${scenarioId}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      alert('다운로드할 영상이 없습니다.');
+    }
+  };
 
   const handleShare = () => {
     if (navigator.share) {
@@ -81,6 +103,59 @@ export function Screen4() {
   const handleRestart = () => {
     resetAll();
     navigate("/create");
+  };
+
+  // TTS 음성 생성
+  const handleGenerateTTS = async () => {
+    try {
+      setTtsStatus('generating');
+      
+      // 모든 씨 설명을 합쳐서 하나의 텍스트로 만들기
+      const narrationText = scenes.map(scene => scene.description).join(' ');
+      
+      const audioUrl = await AIService.generateTTS(scenarioId, narrationText, {
+        onStatusChange: (status) => {
+          setTtsStatus(status);
+        }
+      });
+      
+      setTtsAudioUrl(audioUrl);
+      setTtsStatus('completed');
+      
+    } catch (error) {
+      console.error('TTS generation error:', error);
+      setTtsStatus('error');
+      alert('음성 생성에 실패했습니다.');
+    }
+  };
+
+  // 최종 영상+음성 병합
+  const handleFinalMerge = async () => {
+    try {
+      setFinalMergeStatus('processing');
+      setFinalMergeProgress(0);
+      
+      const finalUrl = await AIService.mergeFinalVideo(scenarioId, {
+        onStatusChange: (status, progress) => {
+          if (progress !== undefined) {
+            setFinalMergeProgress(progress);
+          }
+          if (status === 'completed') {
+            setFinalMergeStatus('completed');
+          } else if (status === 'error') {
+            setFinalMergeStatus('error');
+          }
+        }
+      });
+      
+      setFinalVideoWithAudioUrl(finalUrl);
+      setFinalMergeStatus('completed');
+      
+    } catch (error) {
+      console.error('Final merge error:', error);
+      setFinalMergeStatus('error');
+      alert('최종 병합에 실패했습니다.');
+    }
   };
 
   return (
@@ -116,7 +191,7 @@ export function Screen4() {
           >
             {getCurrentVideoUrl() ? (
               <SafeVideoPlayer
-                src={getCurrentVideoUrl()}
+                src={finalVideoWithAudioUrl || getCurrentVideoUrl()}
                 style={{ width: '100%', height: '100%', borderRadius: 'calc(var(--radius) - 2px)' }}
                 onError={(error) => {
                   console.error('Final video playback error:', error);
@@ -129,28 +204,121 @@ export function Screen4() {
             )}
           </div>
 
-          {/* Action Row */}
+          {/* TTS 및 최종 병합 버튼 */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', flexWrap: 'wrap' }}>
-            {[
-              { icon: <Download size={14} />, label: '다운로드', onClick: handleDownload },
-              { icon: <Share2 size={14} />, label: '공유하기', onClick: handleShare },
-            ].map((btn) => (
+            {/* TTS 생성 버튼 */}
+            {ttsStatus === 'idle' && (
               <button
-                key={btn.label}
-                onClick={btn.onClick}
+                onClick={handleGenerateTTS}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
                   padding: '8px 16px', borderRadius: 'calc(var(--radius) - 2px)',
-                  background: 'var(--bg-surface)', border: '1px solid var(--glass-border)',
-                  color: 'var(--text-secondary)', fontSize: '0.82rem',
+                  background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)',
+                  color: 'var(--accent-violet)', fontSize: '0.82rem',
                   fontFamily: 'var(--font-body)', cursor: 'pointer',
-                  transition: 'border-color 0.2s, color 0.2s',
+                  transition: 'all 0.2s',
                 }}
               >
-                {btn.icon}
-                {btn.label}
+                <Mic size={14} />
+                음성 합성
               </button>
-            ))}
+            )}
+            
+            {ttsStatus === 'generating' && (
+              <button
+                disabled
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', borderRadius: 'calc(var(--radius) - 2px)',
+                  background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)',
+                  color: 'var(--accent-violet)', fontSize: '0.82rem',
+                  fontFamily: 'var(--font-body)', cursor: 'not-allowed',
+                  opacity: 0.6,
+                }}
+              >
+                <div style={{ width: '14px', height: '14px', border: '2px solid transparent', borderTopColor: 'var(--accent-violet)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                음성 생성 중...
+              </button>
+            )}
+            
+            {ttsStatus === 'completed' && finalMergeStatus === 'idle' && (
+              <button
+                onClick={handleFinalMerge}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', borderRadius: 'calc(var(--radius) - 2px)',
+                  background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+                  color: '#10b981', fontSize: '0.82rem',
+                  fontFamily: 'var(--font-body)', cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <Sparkles size={14} />
+                음성 병합
+              </button>
+            )}
+            
+            {finalMergeStatus === 'processing' && (
+              <button
+                disabled
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', borderRadius: 'calc(var(--radius) - 2px)',
+                  background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+                  color: '#10b981', fontSize: '0.82rem',
+                  fontFamily: 'var(--font-body)', cursor: 'not-allowed',
+                  opacity: 0.6,
+                }}
+              >
+                <div style={{ width: '14px', height: '14px', border: '2px solid transparent', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                병합 중... {finalMergeProgress}%
+              </button>
+            )}
+            
+            {finalMergeStatus === 'completed' && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 16px', borderRadius: 'calc(var(--radius) - 2px)',
+                background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+                color: '#10b981', fontSize: '0.82rem',
+                fontFamily: 'var(--font-body)',
+              }}>
+                <CheckCircle size={14} />
+                음성 병합 완료
+              </div>
+            )}
+
+            {/* 다운로드 버튼 */}
+            <button
+              onClick={handleDownload}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 16px', borderRadius: 'calc(var(--radius) - 2px)',
+                background: 'var(--bg-surface)', border: '1px solid var(--glass-border)',
+                color: 'var(--text-secondary)', fontSize: '0.82rem',
+                fontFamily: 'var(--font-body)', cursor: 'pointer',
+                transition: 'border-color 0.2s, color 0.2s',
+              }}
+            >
+              <Download size={14} />
+              다운로드
+            </button>
+            
+            {/* 공유 버튼 */}
+            <button
+              onClick={handleShare}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 16px', borderRadius: 'calc(var(--radius) - 2px)',
+                background: 'var(--bg-surface)', border: '1px solid var(--glass-border)',
+                color: 'var(--text-secondary)', fontSize: '0.82rem',
+                fontFamily: 'var(--font-body)', cursor: 'pointer',
+                transition: 'border-color 0.2s, color 0.2s',
+              }}
+            >
+              <Share2 size={14} />
+              공유하기
+            </button>
           </div>
 
           {/* Stats Strip */}
@@ -234,6 +402,9 @@ export function Screen4() {
         @keyframes ping {
           0%  { transform: scale(1); opacity: 0.5; }
           100% { transform: scale(1.5); opacity: 0; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>

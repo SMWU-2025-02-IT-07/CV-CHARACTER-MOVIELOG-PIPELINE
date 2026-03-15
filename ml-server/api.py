@@ -623,3 +623,243 @@ async def merge_status_endpoint(scenario_id: str):
     """비디오 병합 상태 확인"""
     status = get_merge_status(scenario_id)
     return status
+
+
+@app.post("/generate-tts/{scenario_id}")
+async def generate_tts(
+    scenario_id: str,
+    text: str = Form(...),
+    voice_description: str = Form("A bright and friendly young female voice with clear pronunciation. Natural and engaging tone, suitable for storytelling."),
+    language: str = Form("Korean"),
+    seed: int = Form(433877847153880)
+):
+    """TTS 음성 생성 (Qwen3 TTS)"""
+    print(f"\n=== TTS generation request ===")
+    print(f"Scenario: {scenario_id}")
+    print(f"Text: {text[:100]}...")
+    print(f"Voice: {voice_description[:50]}...")
+    print(f"Language: {language}")
+    
+    # Qwen3 TTS 워크플로우 구성
+    workflow = {
+        "1": {
+            "inputs": {
+                "text": text,
+                "voice_description": voice_description,
+                "language": language,
+                "seed": seed,
+                "max_new_tokens": 2048,
+                "temperature": 1,
+                "top_p": 0.8,
+                "repetition_penalty": 1.1,
+                "model": ["3", 0]
+            },
+            "class_type": "Qwen3TTSVoiceDesign",
+            "_meta": {
+                "title": "Qwen3 TTS Voice Design"
+            }
+        },
+        "2": {
+            "inputs": {
+                "filename_prefix": f"narration/{scenario_id}/audio",
+                "audioUI": "",
+                "audio": ["1", 0]
+            },
+            "class_type": "SaveAudio",
+            "_meta": {
+                "title": "오디오 저장"
+            }
+        },
+        "3": {
+            "inputs": {
+                "model_name": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+                "device": "cuda:0",
+                "dtype": "bfloat16",
+                "keep_model_loaded": True,
+                "use_flash_attn": False
+            },
+            "class_type": "Qwen3TTSModelLoader",
+            "_meta": {
+                "title": "Qwen3 TTS Model Loader"
+            }
+        }
+    }
+    
+    # ComfyUI 실행
+    print(f"Sending TTS request to ComfyUI: {COMFYUI_URL}/prompt")
+    try:
+        response = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow}, timeout=30)
+        print(f"ComfyUI TTS response status: {response.status_code}")
+    except Exception as e:
+        print(f"ComfyUI TTS request failed: {e}")
+        return {"error": f"ComfyUI connection error: {str(e)}"}
+    
+    if response.status_code != 200:
+        print(f"ComfyUI TTS error response: {response.text}")
+        return {"error": f"ComfyUI error: {response.text}"}
+    
+    result = response.json()
+    prompt_id = result.get("prompt_id")
+    
+    if not prompt_id:
+        print(f"No prompt_id in TTS response: {result}")
+        return {"error": "No prompt_id returned from ComfyUI"}
+    
+    print(f"ComfyUI TTS prompt_id: {prompt_id}")
+    
+    return {
+        "prompt_id": prompt_id,
+        "status": "processing",
+        "scenario_id": scenario_id,
+        "type": "tts"
+    }
+
+
+@app.get("/tts-status/{scenario_id}/{prompt_id}")
+async def tts_status(scenario_id: str, prompt_id: str):
+    """TTS 생성 상태 확인"""
+    response = requests.get(f"{COMFYUI_URL}/history/{prompt_id}")
+    history = response.json()
+    
+    if prompt_id in history and history[prompt_id].get("outputs"):
+        # 완료되면 S3 업로드
+        output_files = []
+        for node_output in history[prompt_id]["outputs"].values():
+            if "audio" in node_output:
+                for audio in node_output["audio"]:
+                    # 로컬 파일 경로
+                    if audio.get("subfolder"):
+                        local_path = f"./ComfyUI/output/{audio['subfolder']}/{audio['filename']}"
+                    else:
+                        local_path = f"./ComfyUI/output/{audio['filename']}"
+                    
+                    try:
+                        # S3 업로드 (TTS 오디오)
+                        s3_key = f"audio/{scenario_id}/narration.flac"
+                        s3_url = uploader.upload_file_with_key(local_path, s3_key)
+                        output_files.append(s3_url)
+                        print(f"TTS audio uploaded: {s3_url}")
+                        
+                    except Exception as e:
+                        print(f"Failed to upload TTS audio {local_path}: {e}")
+        
+        return {"status": "completed", "outputs": output_files, "type": "tts"}
+    
+    return {"status": "processing", "type": "tts"}
+
+
+@app.post("/merge-final/{scenario_id}")
+async def merge_final_video_with_audio(scenario_id: str, background_tasks: BackgroundTasks):
+    """영상에 음성 추가 (최종 병합)"""
+    print(f"\n=== 최종 영상+음성 병합 요청: {scenario_id} ===")
+    
+    # 백그라운드에서 병합 실행
+    background_tasks.add_task(merge_video_audio_task, scenario_id)
+    
+    return {
+        "status": "accepted",
+        "message": "영상+음성 병합이 시작되었습니다",
+        "scenario_id": scenario_id
+    }
+
+
+async def merge_video_audio_task(scenario_id: str):
+    """영상과 음성을 병합하는 백그라운드 태스크"""
+    import subprocess
+    import tempfile
+    
+    try:
+        print(f"\n=== 영상+음성 병합 시작: {scenario_id} ===")
+        
+        # S3에서 병합된 영상과 TTS 오디오 다운로드
+        import boto3
+        s3 = boto3.client('s3')
+        bucket = os.getenv('S3_BUCKET_NAME', 'comfyui-ml-v2-videos-c8f7625e')
+        
+        # 임시 디렉토리 생성
+        temp_dir = tempfile.mkdtemp()
+        video_path = os.path.join(temp_dir, "merged_video.mp4")
+        audio_path = os.path.join(temp_dir, "narration.flac")
+        output_path = os.path.join(temp_dir, "final_output.mp4")
+        
+        # 1. 병합된 영상 다운로드
+        video_s3_key = f"videos/{scenario_id}/merged.mp4"
+        print(f"Downloading video: s3://{bucket}/{video_s3_key}")
+        s3.download_file(bucket, video_s3_key, video_path)
+        
+        # 2. TTS 오디오 다운로드
+        audio_s3_key = f"audio/{scenario_id}/narration.flac"
+        print(f"Downloading audio: s3://{bucket}/{audio_s3_key}")
+        s3.download_file(bucket, audio_s3_key, audio_path)
+        
+        # 3. FFmpeg로 영상에 오디오 추가
+        print(f"Merging video and audio with FFmpeg...")
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-i', audio_path,
+            '-c:v', 'copy',  # 비디오 재인코딩 안 함
+            '-c:a', 'aac',   # 오디오를 AAC로 인코딩
+            '-b:a', '192k',  # 오디오 비트레이트
+            '-shortest',     # 짧은 쪽에 맞춤
+            '-y',            # 덮어쓰기
+            output_path
+        ]
+        
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"FFmpeg error: {result.stderr}")
+            raise Exception(f"FFmpeg failed: {result.stderr}")
+        
+        print(f"FFmpeg merge completed successfully")
+        
+        # 4. 최종 영상을 S3에 업로드
+        final_s3_key = f"videos/{scenario_id}/final_with_audio.mp4"
+        print(f"Uploading final video: s3://{bucket}/{final_s3_key}")
+        final_url = uploader.upload_file_with_key(output_path, final_s3_key)
+        
+        print(f"Final video uploaded: {final_url}")
+        
+        # 5. 임시 파일 정리
+        import shutil
+        shutil.rmtree(temp_dir)
+        
+        # 6. 상태 업데이트 (merge_status 딕셔너리 재사용)
+        from video_merge_service import merge_status
+        merge_status[f"{scenario_id}_final"] = {
+            "status": "completed",
+            "progress": 100,
+            "message": "영상+음성 병합 완료",
+            "final_video_url": final_url
+        }
+        
+        print(f"=== 영상+음성 병합 완료: {scenario_id} ===")
+        
+    except Exception as e:
+        print(f"영상+음성 병합 실패: {scenario_id} - {e}")
+        import traceback
+        print(traceback.format_exc())
+        
+        from video_merge_service import merge_status
+        merge_status[f"{scenario_id}_final"] = {
+            "status": "error",
+            "progress": 0,
+            "message": f"병합 실패: {str(e)}"
+        }
+
+
+@app.get("/final-merge-status/{scenario_id}")
+async def final_merge_status_endpoint(scenario_id: str):
+    """최종 병합 상태 확인"""
+    from video_merge_service import merge_status
+    
+    status_key = f"{scenario_id}_final"
+    if status_key in merge_status:
+        return merge_status[status_key]
+    
+    return {
+        "status": "not_started",
+        "progress": 0,
+        "message": "최종 병합이 시작되지 않았습니다"
+    }

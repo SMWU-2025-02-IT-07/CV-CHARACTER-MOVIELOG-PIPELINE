@@ -784,7 +784,7 @@ async def merge_video_audio_task(scenario_id: str):
         output_path = os.path.join(temp_dir, "final_output.mp4")
         
         # 1. 병합된 영상 다운로드
-        video_s3_key = f"videos/{scenario_id}/merged.mp4"
+        video_s3_key = f"videos/{scenario_id}/final.mp4"
         print(f"Downloading video: s3://{bucket}/{video_s3_key}")
         s3.download_file(bucket, video_s3_key, video_path)
         

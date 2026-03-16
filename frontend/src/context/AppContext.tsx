@@ -1,6 +1,16 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import type {
+  CharacterProfile,
+  CharacterProfileInput,
+} from '@/services/character.service';
+import {
+  deleteCharacter,
+  listCharacters,
+  upsertCharacter,
+} from '@/services/character.service';
+import { Dispatch, SetStateAction } from 'react';
 
 interface CharacterData {
   name: string;
@@ -24,13 +34,17 @@ interface Scene {
 interface AppContextType {
   hydrated: boolean;
   characterData: CharacterData;
-  setCharacterData: (data: CharacterData) => void;
+  setCharacterData: Dispatch<SetStateAction<CharacterData>>;
   scenarioId: string;
   setScenarioId: (id: string) => void;
   scenes: Scene[];
-  setScenes: (scenes: Scene[]) => void;
+  setScenes: React.Dispatch<React.SetStateAction<Scene[]>>;
   finalVideoUrl: string;
   setFinalVideoUrl: (url: string) => void;
+  characters: CharacterProfile[];
+  loadCharacters: () => Promise<void>;
+  saveCharacter: (input: CharacterProfileInput & Partial<Pick<CharacterProfile, 'id'>>) => Promise<CharacterProfile>;
+  deleteCharacter: (id: string) => Promise<void>;
   resetAll: () => void;
 }
 
@@ -61,6 +75,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [scenarioId, setScenarioId] = useState<string>('');
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [finalVideoUrl, setFinalVideoUrl] = useState<string>('');
+  const [characters, setCharacters] = useState<CharacterProfile[]>([]);
+
+  const loadCharacters = useCallback(async () => {
+    try {
+      const list = await listCharacters();
+      setCharacters(list);
+    } catch (error) {
+      console.error('Failed to load saved characters:', error);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -115,6 +139,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(stateToPersist));
   }, [hydrated, characterData, scenarioId, scenes, finalVideoUrl]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    loadCharacters();
+  }, [hydrated]);
+
+  const saveCharacter = useCallback(
+    async (input: CharacterProfileInput & Partial<Pick<CharacterProfile, 'id'>>) => {
+      const saved = await upsertCharacter(input);
+      setCharacters((prev) => {
+        const existingIndex = prev.findIndex((c) => c.id === saved.id);
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = saved;
+          return next;
+        }
+        return [...prev, saved];
+      });
+      return saved;
+    },
+    []
+  );
+
+  const removeCharacter = useCallback(async (id: string) => {
+    await deleteCharacter(id);
+    setCharacters((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
   const resetAll = () => {
     setCharacterData(defaultCharacterData);
     setScenarioId('');
@@ -124,18 +175,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AppContext.Provider value={{
-      hydrated,
-      characterData,
-      setCharacterData,
-      scenarioId,
-      setScenarioId,
-      scenes,
-      setScenes,
-      finalVideoUrl,
-      setFinalVideoUrl,
-      resetAll,
-    }}>
+    <AppContext.Provider
+      value={{
+        hydrated,
+        characterData,
+        setCharacterData,
+        scenarioId,
+        setScenarioId,
+        scenes,
+        setScenes,
+        finalVideoUrl,
+        setFinalVideoUrl,
+        characters,
+        loadCharacters,
+        saveCharacter,
+        deleteCharacter: removeCharacter,
+        resetAll,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );

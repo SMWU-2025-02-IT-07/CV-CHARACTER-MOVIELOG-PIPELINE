@@ -24,6 +24,7 @@ export function CharacterLibraryScreen() {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [editing, setEditing] = useState<CharacterProfile | null>(null);
   const [form, setForm] = useState<CharacterProfileInput>(EMPTY_FORM);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     loadCharacters();
@@ -63,6 +64,7 @@ export function CharacterLibraryScreen() {
       };
       await saveCharacter(payload);
       await loadCharacters();
+      setShowForm(false);
       resetForm();
     } catch (error) {
       setErrors({ ...errors, general: '저장 중 오류가 발생했습니다.' });
@@ -147,6 +149,7 @@ export function CharacterLibraryScreen() {
                       className="btn-primary"
                       style={{ height: 44, padding: '0 1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                       onClick={() => {
+                          setShowForm(true);
                           resetForm();
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                       } }
@@ -195,6 +198,7 @@ export function CharacterLibraryScreen() {
                                       className="btn-outline"
                                       style={{ flex: 1, height: 38, fontSize: '0.8rem' }}
                                       onClick={() => {
+                                          setShowForm(true);
                                           setEditing(character);
                                           setForm({
                                               name: character.name,
@@ -219,6 +223,7 @@ export function CharacterLibraryScreen() {
               )}
           </div>
 
+          {showForm && (
           <div className="cinema-card" style={{ padding: '1.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                   <div>
@@ -229,15 +234,16 @@ export function CharacterLibraryScreen() {
                           캐릭터 정보를 저장하면 언제든 이 페이지에서 불러올 수 있습니다.
                       </p>
                   </div>
-                  {isEditing && (
-                      <button
-                          className="btn-outline"
-                          style={{ height: 38, padding: '0 1rem' }}
-                          onClick={resetForm}
-                      >
-                          <X size={16} /> 취소
-                      </button>
-                  )}
+                  <button
+                      className="btn-outline"
+                      style={{ height: 38, padding: '0 1rem' }}
+                      onClick={() => {
+                          resetForm();
+                          setShowForm(false);
+                      }}
+                  >
+                      <X size={14}/>
+                  </button>
               </div>
 
               <div style={{ display: 'grid', gap: '1.25rem' }}>
@@ -413,6 +419,7 @@ export function CharacterLibraryScreen() {
                   )}
               </button>
           </div>
+          )}
       </div><style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style></>
   );
 }

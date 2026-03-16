@@ -5,6 +5,7 @@ import { Screen1 } from "@/app/components/Screen1";
 import { Screen2 } from "@/app/components/Screen2";
 import { Screen3 } from "@/app/components/Screen3";
 import { Screen4 } from "@/app/components/Screen4";
+import { CharacterLibraryScreen } from "@/app/components/CharacterLibraryScreen";
 import AppShell from "@/app/layout/AppShell";
 import { useAppContext } from "@/context/AppContext";
 import { HistoryDetailScreen } from "../components/HistoryDetailScreen";
@@ -56,6 +57,23 @@ export default function AppRouter() {
         element={
           <ShellRoute>
             <Screen1 />
+          </ShellRoute>
+        }
+      />
+
+      <Route
+        path="/characters"
+        element={
+          <ShellRoute>
+            <CharacterLibraryScreen />
+          </ShellRoute>
+        }
+      />
+      <Route
+        path="/character"
+        element={
+          <ShellRoute>
+            <CharacterLibraryScreen />
           </ShellRoute>
         }
       />

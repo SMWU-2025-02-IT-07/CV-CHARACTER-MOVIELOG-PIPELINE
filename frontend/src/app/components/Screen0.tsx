@@ -180,10 +180,11 @@ function useInView(ref: RefObject<Element | null>, threshold = 0.15): boolean {
 
 /* ─── SUB-COMPONENTS ─────────────────────────────── */
 
-function HeroSection({  onStart,  onOpenHistory,}: 
+function HeroSection({  onStart,  onOpenHistory, onOpenCharacter}: 
   {
     onStart: () => void;
     onOpenHistory: () => void;
+    onOpenCharacter: () => void;
   }) {  
     const scrollY = useScrollY();
     const heroOpacity = Math.max(0, 1 - scrollY / 400);
@@ -237,6 +238,14 @@ function HeroSection({  onStart,  onOpenHistory,}:
               style={{ padding: "0 1.75rem", height: 52, fontSize: "0.9rem" }}
             >
               내 영상 보기
+            </button>
+
+            <button
+              className="btn-outline"
+              onClick={onOpenCharacter}
+              style={{ padding: "0 1.75rem", height: 52, fontSize: "0.9rem" }}
+            >
+              캐릭터 관리
             </button>
           </div>
 
@@ -495,6 +504,7 @@ export default function Screen0() {
   const onHome = () => navigate("/");
   const onStart = () => navigate("/create");
   const onOpenHistory = () => navigate("/history");
+  const onOpenCharacter = () => navigate("/character")
   return (
     <>
       <style>{GLOBAL_CSS}</style>
@@ -516,7 +526,7 @@ export default function Screen0() {
       </nav>
 
       <main>
-        <HeroSection onStart={onStart} onOpenHistory={onOpenHistory} />
+        <HeroSection onStart={onStart} onOpenHistory={onOpenHistory} onOpenCharacter={onOpenCharacter}  />
         <MarqueeSection />
         <StepsSection />
         <SpecTable />

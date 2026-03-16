@@ -5,13 +5,14 @@ import { Input } from "@/app/components/ui/input";
 import { useAppContext } from "@/context/AppContext";
 import { StorageService } from "@/services/storage.service";
 import { AIService } from "@/services/ai.service";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 export function Screen1() {
   const navigate = useNavigate();
-  const { characterData, setCharacterData, setScenes, setScenarioId } = useAppContext();
+  const { characterData, setCharacterData, setScenes, setScenarioId, characters } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [showCharacterModal, setShowCharacterModal] = useState(false);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -74,6 +75,17 @@ export function Screen1() {
     { key: 'how', label: '어떻게', placeholder: '예: 노트북을 한다', hint: 'HOW' },
   ] as const;
 
+  const handleLoadCharacter = (characterName: string, characterImageUrl: string) => {
+    setCharacterData((prev) => ({
+      ...prev,
+      name: characterName,
+      image: null,
+      imageUrl: characterImageUrl,
+    }));
+    setShowCharacterModal(false);
+    setErrors({});
+  };
+
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-6 relative z-10">
 
@@ -89,6 +101,8 @@ export function Screen1() {
         </p>
       </div>
 
+
+
       {/* Main Card */}
       <div className="cinema-card fade-up fade-up-2" style={{ overflow: 'visible' }}>
         <div style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -99,9 +113,38 @@ export function Screen1() {
               <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
                 CHARACTER IMAGE
               </label>
-              {characterData.imageUrl && (
-                <span className="status-badge status-badge-complete">LOADED</span>
-              )}
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {characters.length > 0 && (
+                  <button
+                    onClick={() => setShowCharacterModal(true)}
+                    style={{
+                      padding: '0.4rem 0.8rem',
+                      fontSize: '0.7rem',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      color: 'var(--accent-purple)',
+                      background: 'rgba(124,58,237,0.1)',
+                      border: '1px solid rgba(124,58,237,0.3)',
+                      borderRadius: 'calc(var(--radius) - 4px)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.target as HTMLElement).style.background = 'rgba(124,58,237,0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.target as HTMLElement).style.background = 'rgba(124,58,237,0.1)';
+                    }}
+                  >
+                    내 캐릭터 불러오기
+                  </button>
+                )}
+                {characterData.imageUrl && (
+                  <span className="status-badge status-badge-complete">LOADED</span>
+                )}
+              </div>
             </div>
 
             <div
@@ -303,6 +346,101 @@ export function Screen1() {
           </p>
         </div>
       </div>
+
+      {/* Character Modal */}
+      {showCharacterModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(4px)',
+        }}
+        onClick={() => setShowCharacterModal(false)}
+        >
+          <div
+            className="cinema-card"
+            style={{
+              maxWidth: 600,
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: '2rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+              <h2 className="text-display" style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                저장된 캐릭터
+              </h2>
+              <button
+                onClick={() => setShowCharacterModal(false)}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'transparent',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {characters.length === 0 ? (
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                저장된 캐릭터가 없습니다.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem' }}>
+                {characters.map((ch) => (
+                  <button
+                    key={ch.id}
+                    onClick={() => handleLoadCharacter(ch.name, ch.imageUrl)}
+                    style={{
+                      all: 'unset',
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      background: 'rgba(255,255,255,0.03)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'center',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(124,58,237,0.15)';
+                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,58,237,0.5)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)';
+                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.08)';
+                    }}
+                  >
+                    <div style={{
+                      width: '100%',
+                      aspectRatio: '1',
+                      borderRadius: '10px',
+                      background: `url(${ch.imageUrl}) center/cover no-repeat`,
+                      marginBottom: '0.75rem',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                    }} />
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                      {ch.name}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* CSS for spin animation */}
       <style>{`

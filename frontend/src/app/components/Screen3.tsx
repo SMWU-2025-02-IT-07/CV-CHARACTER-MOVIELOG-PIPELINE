@@ -1,9 +1,10 @@
 // src/app/components/Screen3.tsx
 
-import { Sparkles, Film, RefreshCw } from "lucide-react";
+import { Sparkles, Film, RefreshCw, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { AIService } from "@/services/ai.service";
+import { DownloadService } from "@/services/download.service";
 import { Button } from "@/app/components/ui/button";
 import { SafeVideoPlayer } from "@/app/components/SafeVideoPlayer";
 import type { SceneUiStatus } from "@/types/job";
@@ -200,23 +201,49 @@ export function Screen3() {
                   </span>
                 </div>
                 {(status === 'completed' || status === 'error') && (
-                  <button
-                    onClick={() => regenerateScene(scene.id)}
-                    disabled={regeneratingScene === scene.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '5px',
-                      padding: '6px 12px', borderRadius: 'calc(var(--radius) - 2px)',
-                      background: status === 'error' ? 'rgba(239,68,68,0.1)' : 'transparent', 
-                      border: `1px solid ${status === 'error' ? 'rgba(239,68,68,0.3)' : 'var(--glass-border)'}`,
-                      color: status === 'error' ? '#fca5a5' : 'var(--text-secondary)', 
-                      fontSize: '0.7rem', cursor: 'pointer',
-                      fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', textTransform: 'uppercase',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <RefreshCw size={12} style={{ animation: regeneratingScene === scene.id ? 'spin 0.8s linear infinite' : 'none' }} />
-                    {status === 'error' ? 'RETRY' : 'REGENERATE'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {status === 'completed' && (
+                      <button
+                        onClick={() => {
+                          if (scene.videoUrl) {
+                            const filename = DownloadService.generateFilename(`scene_${scene.id}`);
+                            DownloadService.downloadVideo(scene.videoUrl, filename);
+                          }
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '5px',
+                          padding: '6px 12px', borderRadius: 'calc(var(--radius) - 2px)',
+                          background: 'transparent',
+                          border: '1px solid var(--glass-border)',
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.7rem', cursor: 'pointer',
+                          fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', textTransform: 'uppercase',
+                          transition: 'all 0.2s ease',
+                        }}
+                        title="영상 다운로드"
+                      >
+                        <Download size={12} />
+                        DOWNLOAD
+                      </button>
+                    )}
+                    <button
+                      onClick={() => regenerateScene(scene.id)}
+                      disabled={regeneratingScene === scene.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        padding: '6px 12px', borderRadius: 'calc(var(--radius) - 2px)',
+                        background: status === 'error' ? 'rgba(239,68,68,0.1)' : 'transparent', 
+                        border: `1px solid ${status === 'error' ? 'rgba(239,68,68,0.3)' : 'var(--glass-border)'}`,
+                        color: status === 'error' ? '#fca5a5' : 'var(--text-secondary)', 
+                        fontSize: '0.7rem', cursor: 'pointer',
+                        fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', textTransform: 'uppercase',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <RefreshCw size={12} style={{ animation: regeneratingScene === scene.id ? 'spin 0.8s linear infinite' : 'none' }} />
+                      {status === 'error' ? 'RETRY' : 'REGENERATE'}
+                    </button>
+                  </div>
                 )}
               </div>
 

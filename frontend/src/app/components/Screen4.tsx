@@ -3,6 +3,7 @@
 import { Play, Download, Share2, RefreshCw, Sparkles, Pause, SkipForward, SkipBack, CheckCircle, Mic } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAppContext } from "@/context/AppContext";
+import { DownloadService } from "@/services/download.service";
 import { SafeVideoPlayer } from "@/app/components/SafeVideoPlayer";
 import { useNavigate } from "react-router-dom";
 import { AIService } from "@/services/ai.service";
@@ -81,12 +82,8 @@ export function Screen4() {
   const handleDownload = () => {
     const downloadUrl = finalVideoWithAudioUrl || finalVideoUrl;
     if (downloadUrl) {
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = `video_${scenarioId}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const filename = DownloadService.generateFilename('final_video');
+      DownloadService.downloadVideo(downloadUrl, filename);
     } else {
       alert('다운로드할 영상이 없습니다.');
     }

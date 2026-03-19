@@ -92,7 +92,7 @@ const API_V1_BASE_URL = API_BASE_URL.endsWith("/api/v1")
   : `${API_BASE_URL}/api/v1`;
 
 // ML Server URL (ComfyUI + 비디오 생성)
-const ML_SERVER_URL = "http://16.184.61.191:8000";
+const ML_SERVER_URL = import.meta.env.VITE_ML_SERVER_URL || "http://16.184.61.191:8000";
 
 /**
  * ===============================
@@ -372,17 +372,25 @@ export const AIService = {
     characterImageUrl?: string,
     options?: {
       onStatusChange?: (status: 'generating' | 'completed' | 'error') => void;
+      signal?: AbortSignal;
+      timeoutMs?: number;
+      maxRetries?: number;
     }
   ): Promise<string> => {
+    const timeoutMs = options?.timeoutMs ?? 5 * 60 * 1000; // 5분 기본
+    const maxRetries = options?.maxRetries ?? 150; // 2초 간격으로 5분
+    let retryCount = 0;
+
     try {
       // 1) 백엔드에 미리보기 생성 요청
       options?.onStatusChange?.('generating');
-      
+
       const generateResponse = await fetch(`${API_V1_BASE_URL}/scenarios/${scenarioId}/scenes/${sceneId}/preview`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
+        signal: options?.signal,
       });
 
       if (!generateResponse.ok) {
@@ -395,17 +403,35 @@ export const AIService = {
       }
       const promptId = generateResult.prompt_id;
 
-      // 2) 상태 폴링
-      while (true) {
-        await sleep(2000); // 2초 대기
+      // 2) 상태 폴링 (취소 가능 + 타임아웃 + 최대 재시도)
+      const startTime = Date.now();
 
-        const statusResponse = await fetch(`${API_V1_BASE_URL}/scenarios/${scenarioId}/scenes/${sceneId}/preview/${promptId}`);
+      while (retryCount < maxRetries) {
+        if (options?.signal?.aborted) {
+          throw new Error('Preview generation cancelled');
+        }
+
+        if (Date.now() - startTime > timeoutMs) {
+          throw new Error('Preview generation timed out');
+        }
+
+        // 타임아웃 적용된 fetch
+        const statusPromise = fetch(`${API_V1_BASE_URL}/scenarios/${scenarioId}/scenes/${sceneId}/preview/${promptId}`, {
+          signal: options?.signal,
+        });
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Status check timeout')), 10000) // 10초 타임아웃
+        );
+
+        const statusResponse = await Promise.race([statusPromise, timeoutPromise]);
+
         if (!statusResponse.ok) {
           throw new Error(`Failed to check preview status: ${statusResponse.statusText}`);
         }
 
         const statusResult = await statusResponse.json();
-        
+
         if (statusResult.status === 'completed') {
           options?.onStatusChange?.('completed');
           return statusResult.outputs[0] || '';
@@ -413,11 +439,27 @@ export const AIService = {
           options?.onStatusChange?.('error');
           throw new Error('Preview generation failed');
         }
-        
+
         // 여전히 processing 상태
         options?.onStatusChange?.('generating');
+
+        // 다음 폴링 전 대기 (취소 가능)
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, 2000);
+          options?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('Polling cancelled'));
+          });
+        });
+
+        retryCount++;
       }
+
+      throw new Error('Max retries exceeded for preview generation');
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Preview generation cancelled');
+      }
       options?.onStatusChange?.('error');
       throw error;
     }

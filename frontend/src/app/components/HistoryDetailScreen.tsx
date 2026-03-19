@@ -1,7 +1,8 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Play, Film, Clock3 } from "lucide-react";
+import { ArrowLeft, Play, Film, Clock3, Download } from "lucide-react";
 import { AIService } from "@/services/ai.service";
+import { DownloadService } from "@/services/download.service";
 import type { LibraryScenarioDetail } from "@/services/ai.service";
 import { useAppContext } from "@/context/AppContext";
 
@@ -221,12 +222,44 @@ export function HistoryDetailScreen() {
             <div
               style={{
                 marginBottom: 10,
-                fontFamily: "var(--font-display)",
-                fontWeight: 700,
-                color: "var(--text-primary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
               }}
             >
-              최종 영상
+              <div
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 700,
+                  color: "var(--text-primary)",
+                }}
+              >
+                최종 영상
+              </div>
+              <button
+                onClick={() => {
+                  const filename = DownloadService.generateFilename('final_video');
+                  DownloadService.downloadVideo(data.final_video_url, filename);
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius)",
+                  background: "transparent",
+                  border: "1px solid var(--glass-border)",
+                  color: "var(--text-secondary)",
+                  fontSize: "0.8rem",
+                  fontFamily: "var(--font-mono)",
+                  cursor: "pointer",
+                  transition: "border-color 0.2s, color 0.2s",
+                }}
+                title="최종 영상 다운로드"
+              >
+                <Download size={13} />
+                다운로드
+              </button>
             </div>
 
             <div
@@ -350,26 +383,51 @@ export function HistoryDetailScreen() {
                   </div>
 
                   {scene.video_url && (
-                    <a
-                      href={scene.video_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        padding: "8px 12px",
-                        borderRadius: "var(--radius)",
-                        background: "rgba(124,58,237,0.1)",
-                        border: "1px solid rgba(124,58,237,0.24)",
-                        color: "#c4b5fd",
-                        textDecoration: "none",
-                        fontSize: "0.82rem",
-                      }}
-                    >
-                      <Play size={13} />
-                      장면 영상 보기
-                    </a>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <a
+                        href={scene.video_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "8px 12px",
+                          borderRadius: "var(--radius)",
+                          background: "rgba(124,58,237,0.1)",
+                          border: "1px solid rgba(124,58,237,0.24)",
+                          color: "#c4b5fd",
+                          textDecoration: "none",
+                          fontSize: "0.82rem",
+                        }}
+                      >
+                        <Play size={13} />
+                        장면 영상 보기
+                      </a>
+                      <button
+                        onClick={() => {
+                          const filename = DownloadService.generateFilename(`scene_${scene.id}`);
+                          DownloadService.downloadVideo(scene.video_url, filename);
+                        }}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "8px 12px",
+                          borderRadius: "var(--radius)",
+                          background: "transparent",
+                          border: "1px solid var(--glass-border)",
+                          color: "var(--text-secondary)",
+                          fontSize: "0.82rem",
+                          cursor: "pointer",
+                          transition: "border-color 0.2s, color 0.2s",
+                        }}
+                        title="장면 영상 다운로드"
+                      >
+                        <Download size={13} />
+                        다운로드
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

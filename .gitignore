@@ -7,3 +7,20 @@ __pycache__
 *.pyc
 data/
 comfyui-ml-v2-keypair.pem
+
+# Test files
+test_*.py
+*_test.py
+test_*.json
+resp.json
+temp_*.json
+
+# Test output
+temp_videos/
+*.mp4
+*.flac
+*.wav
+*.mp3
+
+# ComfyUI (should only be in ml-server)
+backend/ComfyUI/

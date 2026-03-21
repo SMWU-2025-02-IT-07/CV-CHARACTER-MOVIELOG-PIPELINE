@@ -2,8 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 시스템 패키지 설치 (필요한 것만)
+# 시스템 패키지 설치 (FFmpeg 포함)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 의존성 먼저 복사 및 설치 (캐시 최적화)

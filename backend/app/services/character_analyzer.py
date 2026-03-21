@@ -95,33 +95,36 @@ def _mock_character_and_scenes(req: CreateScenarioRequest) -> dict:
     scene_templates = [
         {
             "scene_number": 1,
-            "scenario_ko": f"{name}가 {where}에 서서 주변을 천천히 둘러보며 호기심 가득한 표정을 짓는다. 햇살이 부드럽게 비추고, 평화로운 분위기가 감돈다.",
-            "image_prompt_en": f"A cute character standing in {where}, curious expression, soft sunlight, peaceful atmosphere, 3D animation style, warm lighting",
+            "scenario_ko": f"{name}가 {where}에 서서 주변을 둘러본다.",
+            "image_prompt_en": f"A cute 3D animated character standing in {where}, curious expression, looking around, soft sunlight, peaceful atmosphere, cinematic composition, warm color palette, shallow depth of field",
             "video_prompt_en": (
                 f"{character_description} stands gently in {where}, "
                 f"slowly turning head to look around with bright curious eyes, "
                 f"soft sunlight filtering through, gentle breeze, calm opening shot, peaceful 3D animation style"
             ),
+            "narration_text": f"{name}가 {where}에 서서 주변을 둘러봅니다.",
         },
         {
             "scene_number": 2,
-            "scenario_ko": f"{name}가 {where}을 천천히 걸어다니며 {what} 부드럽게 움직인다. 몸짓과 표정에서 즐거운 감정이 자연스럽게 드러난다.",
-            "image_prompt_en": f"A cute character walking slowly in {where}, gentle movement, happy expression, soft outdoor lighting, 3D animation",
+            "scenario_ko": f"{name}가 {where}을 천천히 걸어다닌다.",
+            "image_prompt_en": f"A cute 3D animated character walking slowly in {where}, gentle movement, happy expression, mid-shot, soft outdoor lighting, natural environment, warm tones, 3D animation style",
             "video_prompt_en": (
                 f"{character_description} walks slowly across {where}, "
                 f"gently moving while {what}, soft body motion, calm facial expression, "
                 f"smooth camera tracking, warm outdoor lighting, serene animated feel"
             ),
+            "narration_text": f"호기심 가득한 눈으로 천천히 걸어갑니다.",
         },
         {
             "scene_number": 3,
-            "scenario_ko": f"{name}가 {where} 한가운데에서 {how} 조용히 움직이며 평화롭게 논다. 마지막에는 만족스러운 표정으로 장면이 마무리된다.",
-            "image_prompt_en": f"A cute character in the center of {where}, peaceful play, satisfied expression, golden hour lighting, 3D animation",
+            "scenario_ko": f"{name}가 {where}에서 {how} 조용히 논다.",
+            "image_prompt_en": f"A cute 3D animated character in the center of {where}, peaceful play, satisfied expression, resting pose, golden hour lighting, soft focus background, cinematic framing, 3D animation",
             "video_prompt_en": (
                 f"{character_description} moves calmly in the center of {where}, "
                 f"expressing contentment through gentle posture and peaceful facial expression, "
                 f"settling into a satisfying final moment, soft cinematic camera, tranquil 3D animation mood"
             ),
+            "narration_text": f"{how} 놀다가 만족스럽게 쉬어갑니다.",
         },
     ]
 
@@ -192,13 +195,14 @@ Art style: 3D animation"""
             "max_tokens": 4000,
             "messages": messages,
             "temperature": 0.7,
-            "system": """You are a video director specializing in LTX-2 AI video generation.
+            "system": """You are a video director specializing in LTX-2 AI video generation and Flux image generation.
 
 Given a character description and a situation, generate exactly 3 connected scenes.
 
 IMPORTANT CONSTRAINTS:
-- Each scene is ONLY 4 SECONDS long - keep video prompts simple and focused
+- Each scene is ONLY 4 SECONDS long - keep everything simple and focused
 - Total narration must be around 12 seconds (all 3 scenes combined)
+- Each scene's narration should be 3-4 seconds when read aloud
 - Video prompts must describe ONE simple action per scene, not multiple actions
 - Narration must be in KOREAN and flow naturally when read aloud
 
@@ -213,6 +217,14 @@ Rules:
 - Avoid words like "energetically", "quickly", "dynamically", "vibrantly"
 - Keep video_prompt_en concise (2-3 sentences max) since each scene is only 4 seconds
 
+IMAGE PROMPT GUIDELINES:
+- image_prompt_en is for Flux model to generate the FIRST FRAME of the LTX-2 video
+- Describe a STATIC MOMENT that will become the starting frame of the video
+- Include: character pose, environment, lighting, composition, camera angle
+- Focus on visual elements: colors, textures, atmosphere, depth of field
+- Use photography/cinematography terms: "close-up", "wide shot", "soft focus", "golden hour lighting"
+- Example: "A cute 3D animated cat sitting on grass, looking up at a butterfly, soft morning light, shallow depth of field, warm color palette, cinematic composition"
+
 Output strict JSON only, no markdown, no explanation:
 {
   "character_description": "Fixed English description of character appearance. Used as prefix in all scenes.",
@@ -220,9 +232,9 @@ Output strict JSON only, no markdown, no explanation:
     {
       "scene_number": 1,
       "scenario_ko": "한국어 시나리오 1-2문장. 간결하게.",
-      "image_prompt_en": "English image generation prompt for this scene, describing composition, lighting, and visual elements.",
+      "image_prompt_en": "Detailed Flux image prompt describing the FIRST FRAME: character pose, environment, lighting, composition, camera angle. This becomes the starting image for LTX-2 video generation.",
       "video_prompt_en": "{character_description} + ONE simple gentle action, slow camera movement, peaceful environment. (2-3 sentences max for 4 second scene)",
-      "narration_text": "한국어 나레이션 텍스트. 자연스럽게 읽을 수 있는 1-2문장. 전체 3개 씬 합쳐서 12초 분량."
+      "narration_text": "한국어 나레이션 텍스트. 자연스럽게 읽을 수 있는 1-2문장. 이 씬만 3-4초 분량. 전체 3개 씬 합쳐서 12초."
     },
     {
       "scene_number": 2,
@@ -243,11 +255,15 @@ Output strict JSON only, no markdown, no explanation:
 
 NARRATION GUIDELINES:
 - Write in natural spoken Korean
-- Each scene's narration should be 3-4 seconds when read aloud
-- Total of all 3 scenes should be around 12 seconds
+- Each scene's narration: 3-4 seconds when read aloud (약 10-15자)
+- Total of all 3 scenes: around 12 seconds (약 30-45자)
 - Use present tense and descriptive language
 - Make it sound like a storybook narration
-- Example: "작은 고양이가 풀밭에 앉아 나비를 발견합니다. 호기심 가득한 눈으로 천천히 다가가요. 나비와 함께 즐겁게 놀다가 만족스럽게 쉬어갑니다."
+- Keep it SHORT and CONCISE - remember it's only 4 seconds per scene
+- Example for 3 scenes (12 seconds total):
+  Scene 1 (4초): "작은 고양이가 풀밭에 앉아 나비를 발견합니다."
+  Scene 2 (4초): "호기심 가득한 눈으로 천천히 다가가요."
+  Scene 3 (4초): "나비와 함께 즐겁게 놀다가 쉬어갑니다."
 """
         }
         

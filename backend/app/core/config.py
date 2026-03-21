@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     
     # 기타 설정
     cors_origins: str = "http://localhost:3000"
-    scenarios_dir: str = str((Path(__file__).resolve().parents[2] / "data" / "scenarios"))
+    scenarios_dir: str = str((Path(__file__).resolve().parents[2] / "scenarios"))
 
     #Mock
     use_mock_llm: bool = False

@@ -16,6 +16,74 @@ uploader = S3Uploader()
 # 병합 상태 저장 (메모리)
 merge_status = {}
 
+def download_audio_file(scenario_id: str, temp_dir: str) -> str:
+    """S3에서 오디오 파일 다운로드"""
+    try:
+        s3 = boto3.client('s3')
+        bucket = os.getenv('S3_BUCKET_NAME', 'comfyui-ml-v2-videos-c8f7625e')
+        
+        response = s3.list_objects_v2(
+            Bucket=bucket,
+            Prefix=f"audio/{scenario_id}/"
+        )
+        
+        if 'Contents' not in response:
+            print(f"No audio file found for scenario {scenario_id}")
+            return None
+        
+        audio_files = [
+            obj['Key'] for obj in response['Contents']
+            if obj['Key'].endswith(('.mp3', '.wav', '.aac', '.m4a', '.flac'))
+        ]
+        
+        if not audio_files:
+            print(f"No audio file found for scenario {scenario_id}")
+            return None
+        
+        # 첫 번째 오디오 파일 다운로드
+        s3_key = audio_files[0]
+        local_file = Path(temp_dir) / Path(s3_key).name
+        
+        print(f"Downloading audio: {s3_key}")
+        s3.download_file(bucket, s3_key, str(local_file))
+        
+        return str(local_file)
+        
+    except Exception as e:
+        print(f"Error downloading audio file: {e}")
+        return None
+
+def merge_video_with_audio(video_file: str, audio_file: str, output_file: str, ffmpeg_path: str = 'ffmpeg') -> bool:
+    """비디오와 오디오를 병합"""
+    try:
+        cmd = [
+            ffmpeg_path,
+            '-i', video_file,
+            '-i', audio_file,
+            '-c:v', 'copy',      # 비디오는 재인코딩 없이 복사
+            '-c:a', 'aac',       # 오디오는 AAC로 인코딩
+            '-b:a', '192k',
+            '-map', '0:v:0',     # 첫 번째 입력의 비디오
+            '-map', '1:a:0',     # 두 번째 입력의 오디오
+            '-shortest',         # 짧은 쪽에 맞춤
+            '-y',
+            output_file
+        ]
+        
+        print(f"FFmpeg command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            print(f"Video-audio merge successful: {output_file}")
+            return True
+        else:
+            print(f"FFmpeg error: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print(f"Error merging video with audio: {e}")
+        return False
+
 def download_video_from_url(video_url: str, output_path: str) -> bool:
     """URL에서 비디오 파일 다운로드"""
     try:
@@ -38,14 +106,14 @@ def download_video_from_url(video_url: str, output_path: str) -> bool:
 
 
 def create_ffmpeg_concat_file(video_files: List[str], concat_file_path: str) -> None:
-    """FFmpeg concat 파일 생성"""
+    """FFmpeg concat 파일 생성 (절대 경로 사용)"""
     try:
         print(f"FFmpeg concat 파일 생성: {concat_file_path}")
         with open(concat_file_path, 'w', encoding='utf-8') as f:
             for video_file in video_files:
-                # 경로를 FFmpeg가 인식할 수 있도록 변환
-                ffmpeg_path = video_file.replace('\\', '/')
-                f.write(f"file '{ffmpeg_path}'\n")  # \n이 아니라 실제 줄바꿈
+                # 절대 경로로 변환 후 Unix 스타일로 변경
+                abs_path = Path(video_file).resolve().as_posix()
+                f.write(f"file '{abs_path}'\n")
         
         print(f"Concat 파일 내용:")
         with open(concat_file_path, 'r', encoding='utf-8') as f:
@@ -56,10 +124,10 @@ def create_ffmpeg_concat_file(video_files: List[str], concat_file_path: str) -> 
         raise
 
 
-def merge_videos_with_ffmpeg(video_files: List[str], output_path: str) -> bool:
-    """FFmpeg를 사용해서 비디오 병합"""
+def merge_videos_with_ffmpeg(video_files: List[str], output_path: str, ffmpeg_path: str = 'ffmpeg') -> bool:
+    """FFmpeg를 사용해서 비디오 병합 (오디오 없음)"""
     try:
-        print(f"\\n=== FFmpeg 비디오 병합 시작 ===")
+        print(f"\n=== FFmpeg 비디오 병합 시작 ===")
         print(f"입력 파일 수: {len(video_files)}")
         print(f"출력 파일: {output_path}")
         
@@ -71,11 +139,14 @@ def merge_videos_with_ffmpeg(video_files: List[str], output_path: str) -> bool:
         
         # FFmpeg 명령어 구성
         ffmpeg_cmd = [
-            'ffmpeg',
+            ffmpeg_path,
             '-f', 'concat',
             '-safe', '0',
             '-i', concat_file_path,
-            '-c', 'copy',  # 재인코딩 없이 복사
+            '-c:v', 'libx264',  # 비디오 코덱
+            '-c:a', 'aac',      # 오디오 코덱
+            '-b:a', '192k',     # 오디오 비트레이트
+            '-preset', 'fast',
             '-y',  # 출력 파일 덮어쓰기
             output_path
         ]
@@ -135,8 +206,10 @@ def get_scenario_from_s3(scenario_id: str) -> Dict:
 
 
 def merge_scenario_videos(scenario_id: str) -> Dict:
-    """시나리오의 모든 씬 비디오를 병합"""
-    print(f"\\n=== 시나리오 비디오 병합 시작: {scenario_id} ===")
+    """시나리오의 모든 씬 비디오를 병합하고 오디오 추가"""
+    print(f"\n=== 시나리오 비디오 병합 시작: {scenario_id} ===")
+    
+    ffmpeg_path = os.getenv('FFMPEG_PATH', 'ffmpeg')
     
     # 상태 초기화
     merge_status[scenario_id] = {
@@ -173,17 +246,6 @@ def merge_scenario_videos(scenario_id: str) -> Dict:
             }
             return merge_status[scenario_id]
         
-        if len(scenes_with_video) == 1:
-            print(f"씬이 1개뿐이므로 병합 없이 원본 비디오 사용")
-            merge_status[scenario_id] = {
-                "status": "completed",
-                "message": "Single scene, no merge needed",
-                "final_video_url": scenes_with_video[0]["video_url"],
-                "scene_count": 1,
-                "progress": 100
-            }
-            return merge_status[scenario_id]
-        
         print(f"병합할 씬 수: {len(scenes_with_video)}")
         merge_status[scenario_id]["message"] = f"{len(scenes_with_video)}개 씬 병합 중"
         merge_status[scenario_id]["progress"] = 10
@@ -203,14 +265,14 @@ def merge_scenario_videos(scenario_id: str) -> Dict:
                 video_filename = f"scene_{scene_id:03d}.mp4"
                 video_path = temp_path / video_filename
                 
-                print(f"\\n씬 {scene_id} 비디오 다운로드 중... ({i+1}/{total_scenes})")
+                print(f"\n씬 {scene_id} 비디오 다운로드 중... ({i+1}/{total_scenes})")
                 
                 if download_video_from_url(video_url, str(video_path)):
                     downloaded_files.append(str(video_path))
                     print(f"다운로드 성공: {video_path}")
                     
-                    # 진행률 업데이트 (10% ~ 60%)
-                    progress = 10 + int((i + 1) / total_scenes * 50)
+                    # 진행률 업데이트 (10% ~ 40%)
+                    progress = 10 + int((i + 1) / total_scenes * 30)
                     merge_status[scenario_id]["progress"] = progress
                 else:
                     print(f"다운로드 실패: 씬 {scene_id} 건너뛰기")
@@ -223,51 +285,80 @@ def merge_scenario_videos(scenario_id: str) -> Dict:
                 }
                 return merge_status[scenario_id]
             
-            print(f"\\n다운로드 완료된 파일 수: {len(downloaded_files)}")
+            print(f"\n다운로드 완료된 파일 수: {len(downloaded_files)}")
             merge_status[scenario_id]["message"] = "비디오 병합 중"
-            merge_status[scenario_id]["progress"] = 60
+            merge_status[scenario_id]["progress"] = 40
             
-            # 비디오 병합
-            final_video_path = temp_path / f"final_{scenario_id}.mp4"
-            print(f"\\n비디오 병합 시작...")
+            # 1단계: 비디오들 병합 (오디오 없음)
+            merged_no_audio = temp_path / "merged_no_audio.mp4"
+            print(f"\n1단계: 비디오 병합 시작...")
             
-            if merge_videos_with_ffmpeg(downloaded_files, str(final_video_path)):
-                print(f"비디오 병합 성공: {final_video_path}")
-                merge_status[scenario_id]["progress"] = 80
-                
-                # S3에 최종 비디오 업로드
-                print(f"\\nS3에 최종 비디오 업로드 중...")
-                merge_status[scenario_id]["message"] = "S3 업로드 중"
-                
-                try:
-                    s3_key = f"videos/{scenario_id}/final.mp4"
-                    final_video_url = uploader.upload_file_with_key(str(final_video_path), s3_key)
-                    print(f"S3 업로드 성공: {final_video_url}")
-                    
-                    merge_status[scenario_id] = {
-                        "status": "completed",
-                        "message": "Video merge completed successfully",
-                        "final_video_url": final_video_url,
-                        "scene_count": len(downloaded_files),
-                        "merged_scenes": [s["id"] for s in scenes_with_video if any(f"scene_{s['id']:03d}" in f for f in downloaded_files)],
-                        "progress": 100
-                    }
-                    
-                    return merge_status[scenario_id]
-                    
-                except Exception as e:
-                    print(f"S3 업로드 실패: {e}")
-                    merge_status[scenario_id] = {
-                        "status": "failed",
-                        "message": f"S3 업로드 실패: {str(e)}",
-                        "progress": 80
-                    }
-                    return merge_status[scenario_id]
-            else:
+            if not merge_videos_with_ffmpeg(downloaded_files, str(merged_no_audio), ffmpeg_path):
                 merge_status[scenario_id] = {
                     "status": "failed",
                     "message": "비디오 병합 실패",
-                    "progress": 60
+                    "progress": 40
+                }
+                return merge_status[scenario_id]
+            
+            print(f"비디오 병합 성공: {merged_no_audio}")
+            merge_status[scenario_id]["progress"] = 60
+            
+            # 2단계: 오디오 파일 다운로드
+            print(f"\n2단계: 오디오 다운로드...")
+            audio_file = download_audio_file(scenario_id, temp_dir)
+            
+            final_video_path = temp_path / f"final_{scenario_id}.mp4"
+            
+            if audio_file:
+                # 오디오가 있으면 비디오와 병합
+                print(f"\n3단계: 비디오 + 오디오 병합...")
+                merge_status[scenario_id]["message"] = "비디오 + 오디오 병합 중"
+                merge_status[scenario_id]["progress"] = 70
+                
+                if not merge_video_with_audio(str(merged_no_audio), audio_file, str(final_video_path), ffmpeg_path):
+                    merge_status[scenario_id] = {
+                        "status": "failed",
+                        "message": "비디오-오디오 병합 실패",
+                        "progress": 70
+                    }
+                    return merge_status[scenario_id]
+                
+                print(f"비디오-오디오 병합 성공: {final_video_path}")
+            else:
+                # 오디오가 없으면 비디오만 사용
+                print(f"오디오 파일 없음, 비디오만 사용")
+                Path(merged_no_audio).rename(final_video_path)
+            
+            merge_status[scenario_id]["progress"] = 80
+            
+            # S3에 최종 비디오 업로드
+            print(f"\nS3에 최종 비디오 업로드 중...")
+            merge_status[scenario_id]["message"] = "S3 업로드 중"
+            
+            try:
+                s3_key = f"final_videos/{scenario_id}.mp4"
+                final_video_url = uploader.upload_file_with_key(str(final_video_path), s3_key)
+                print(f"S3 업로드 성공: {final_video_url}")
+                
+                merge_status[scenario_id] = {
+                    "status": "completed",
+                    "message": "Video merge completed successfully",
+                    "final_video_url": final_video_url,
+                    "scene_count": len(downloaded_files),
+                    "merged_scenes": [s["id"] for s in scenes_with_video if any(f"scene_{s['id']:03d}" in f for f in downloaded_files)],
+                    "has_audio": audio_file is not None,
+                    "progress": 100
+                }
+                
+                return merge_status[scenario_id]
+                
+            except Exception as e:
+                print(f"S3 업로드 실패: {e}")
+                merge_status[scenario_id] = {
+                    "status": "failed",
+                    "message": f"S3 업로드 실패: {str(e)}",
+                    "progress": 80
                 }
                 return merge_status[scenario_id]
                 
